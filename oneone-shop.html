@@ -355,7 +355,9 @@ tr:hover td{background:rgba(0,0,0,.01);}
 .mobile-nav a:hover{color:var(--gold);}
 .mobile-nav-close{position:absolute;top:1.5rem;right:1.5rem;background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.5rem;cursor:pointer;}
 
-/* Responsive */
+/* ===== RESPONSIVE ===== */
+
+/* Tablets & small desktops */
 @media(max-width:900px){
   .category-strip{grid-template-columns:repeat(2,1fr);}
   .checkout-grid{grid-template-columns:1fr;}
@@ -367,14 +369,80 @@ tr:hover td{background:rgba(0,0,0,.01);}
   .sh-nav{display:none;}
   .ham-btn{display:flex;}
 }
+
+/* Mobile phones - ONE ITEM PER ROW */
 @media(max-width:600px){
-  .category-strip{grid-template-columns:1fr 1fr;gap:.75rem;padding:1.5rem 4vw;}
+  /* Category strip: 2 columns on small screens */
+  .category-strip{
+    grid-template-columns:1fr 1fr;
+    gap:.75rem;
+    padding:1.5rem 4vw;
+  }
+  
+  /* Products: ONE item per row on mobile */
+  .product-grid{
+    grid-template-columns:1fr !important;
+    gap:1rem;
+  }
+  
+  /* Product cards take full width */
+  .prod-card{
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    padding:0.75rem;
+    gap:1rem;
+  }
+  .prod-img,
+  .prod-img-placeholder{
+    width:100px;
+    height:100px;
+    flex-shrink:0;
+    aspect-ratio:1;
+    border-radius:6px;
+  }
+  .prod-img-placeholder{font-size:2rem;}
+  .prod-body{
+    flex:1;
+    padding:0;
+  }
+  .prod-desc{display:none;}
+  .prod-foot{flex-wrap:wrap;gap:.5rem;}
+  
+  /* Category page product grid also one per row */
+  .category-strip{grid-template-columns:1fr 1fr;}
+  
   .checkout-grid{grid-template-columns:1fr;}
   .form-row{grid-template-columns:1fr;}
   .fm-row{grid-template-columns:1fr;}
   .stats-grid{grid-template-columns:1fr 1fr;}
-  .product-grid{grid-template-columns:repeat(2,1fr);gap:.75rem;}
+  
+  /* Category cards on mobile */
   .cat-card{padding:1.25rem 1rem;}
+  
+  /* Make product cards more touch-friendly */
+  .prod-qty-ctrl button{
+    width:36px;
+    height:36px;
+    font-size:1.1rem;
+  }
+  .prod-qty-num{
+    width:36px;
+    height:36px;
+    line-height:36px;
+  }
+  
+  /* Modal adjustments */
+  .modal-body{padding:1.25rem;}
+  .modal-name{font-size:1.2rem;}
+  .modal-price{font-size:1.5rem;}
+  
+  /* Cart drawer full width on mobile */
+  .cart-drawer{width:100%;}
+  
+  /* Hero text smaller */
+  .shop-hero{padding:50px 4vw 40px;}
+  .shop-hero h1{font-size:clamp(1.5rem,6vw,2.2rem);}
 }
 </style>
 </head>
