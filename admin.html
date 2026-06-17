@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<script>
+// Simple password protection
+// NOTE: this runs before <body> exists. Earlier versions tried
+// document.body.innerHTML (threw "Cannot set properties of null" since
+// body didn't exist yet) and later document.write() (which didn't reliably
+// stop the rest of this file's markup from still being parsed and shown
+// underneath the message in all cases). A hard redirect is the only
+// approach that reliably prevents the protected page content from ever
+// rendering, regardless of browser parsing quirks.
+var ADMIN_PASSWORD = 'admin123'; // Change this!
+var entered = prompt('请输入管理员密码:');
+if (entered !== ADMIN_PASSWORD) {
+  alert('⛔ 访问被拒绝 / Access denied');
+  window.location.href = 'index.html';
+  throw new Error('Access Denied');
+}
+</script>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OnePrime · 管理后台</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Admin-specific overrides */
+    body{background:#F0EDE8;}
+    #adminScreen{display:flex!important;min-height:100vh;}
+    .admin-sidebar{width:260px;background:#1A1410;flex-shrink:0;display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0;z-index:10;}
+    .admin-logo{padding:1.5rem;border-bottom:1px solid rgba(201,168,76,0.1);}
+    .admin-logo-text{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;color:#C9A84C;}
+    .admin-logo-sub{font-size:.6rem;letter-spacing:.15em;color:rgba(255,255,255,0.25);margin-top:2px;}
+    .admin-nav{flex:1;padding:1rem 0;}
+    .admin-nav-item{display:flex;align-items:center;gap:.75rem;padding:.75rem 1.5rem;color:rgba(255,255,255,0.5);font-size:.83rem;cursor:pointer;transition:all .2s;border-left:3px solid transparent;}
+    .admin-nav-item:hover{background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.8);}
+    .admin-nav-item.active{background:rgba(201,168,76,0.08);color:#C9A84C;border-left-color:#C9A84C;}
+    .admin-nav-icon{font-size:1rem;width:20px;text-align:center;}
+    .admin-footer{padding:1rem 1.5rem;border-top:1px solid rgba(255,255,255,0.05);}
+    .admin-logout{background:none;border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.4);padding:8px 16px;border-radius:4px;font-size:.78rem;width:100%;cursor:pointer;transition:all .2s;}
+    .admin-logout:hover{border-color:#C0392B;color:#C0392B;}
+    .admin-main{margin-left:260px;flex:1;padding:2rem;min-width:0;}
+    .admin-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem;}
+    .admin-page-title{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:600;}
+    .sh-avatar{width:30px;height:30px;border-radius:50%;background:#C9A84C;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#1A1410;}
+    .admin-panel{display:none;}
+    .admin-panel.active{display:block;}
+    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.25rem;margin-bottom:2rem;}
+    .stat-card{background:#FFFFFF;border-radius:10px;padding:1.5rem;border:1px solid rgba(0,0,0,.05);}
+    .stat-label{font-size:.72rem;letter-spacing:.08em;color:#7A6850;margin-bottom:.5rem;}
+    .stat-value{font-family:'Playfair Display',serif;font-size:1.75rem;font-weight:700;}
+    .stat-change{font-size:.72rem;margin-top:.3rem;}
+    .stat-change.up{color:#2D8C5F;}
+    .stat-change.down{color:#C0392B;}
+    .admin-card{background:#FFFFFF;border-radius:10px;border:1px solid rgba(0,0,0,.05);overflow:hidden;}
+    .admin-card-header{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1.5rem;border-bottom:1px solid rgba(0,0,0,.06);}
+    .admin-card-title{font-weight:700;font-size:.95rem;}
+    .admin-btn{padding:8px 18px;border-radius:4px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .2s;border:none;}
+    .admin-btn-gold{background:#C9A84C;color:#1A1410;}
+    .admin-btn-gold:hover{background:#E8C97A;}
+    .admin-btn-outline{background:transparent;border:1px solid rgba(0,0,0,.15);color:#2B2218;}
+    .admin-btn-outline:hover{background:rgba(0,0,0,.04);}
+    .admin-search{display:flex;align-items:center;gap:.75rem;}
+    .admin-search input{padding:8px 14px;border:1px solid rgba(0,0,0,.1);border-radius:4px;font-size:.82rem;width:200px;}
+    .admin-search input:focus{outline:none;border-color:#C9A84C;}
+    .filter-select{padding:8px 12px;border:1px solid rgba(0,0,0,.1);border-radius:4px;font-size:.82rem;background:#FFFFFF;}
+    .filter-select:focus{outline:none;border-color:#C9A84C;}
+    table{width:100%;border-collapse:collapse;}
+    th{text-align:left;font-size:.7rem;letter-spacing:.08em;color:#7A6850;padding:.75rem 1.25rem;border-bottom:1px solid rgba(0,0,0,.06);font-weight:600;}
+    td{padding:.9rem 1.25rem;font-size:.83rem;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:middle;}
+    tr:last-child td{border-bottom:none;}
+    tr:hover td{background:rgba(0,0,0,.01);}
+    .td-img{width:44px;height:44px;object-fit:cover;border-radius:6px;background:#FAF7F0;}
+    .td-img-ph{width:44px;height:44px;border-radius:6px;background:linear-gradient(135deg,#f5f0e8,#ede5d4);display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
+    .td-actions{display:flex;gap:.4rem;}
+    .td-btn{padding:5px 12px;border-radius:3px;font-size:.72rem;font-weight:600;cursor:pointer;border:none;transition:all .2s;}
+    .td-edit{background:rgba(201,168,76,0.1);color:#4A3D30;}
+    .td-edit:hover{background:#C9A84C;color:#1A1410;}
+    .td-del{background:#FDECEA;color:#C0392B;}
+    .td-del:hover{background:#C0392B;color:#FFFFFF;}
+    .pagination{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-top:1px solid rgba(0,0,0,.06);}
+    .page-info{font-size:.78rem;color:#7A6850;}
+    .page-btns{display:flex;gap:.4rem;}
+    .page-btn{padding:5px 10px;border:1px solid rgba(0,0,0,.1);border-radius:3px;font-size:.75rem;background:#FFFFFF;cursor:pointer;transition:all .2s;}
+    .page-btn.active,.page-btn:hover{background:#C9A84C;border-color:#C9A84C;color:#1A1410;font-weight:600;}
+    .orders-table-wrap{overflow-x:auto;}
+    .order-status{padding:3px 10px;border-radius:3px;font-size:.7rem;font-weight:600;letter-spacing:.04em;}
+    .os-pending{background:#FEF3CD;color:#7A5C00;}
+    .os-processing{background:#E8F0FE;color:#2B5BE0;}
+    .os-shipped{background:#E8F5EE;color:#2D8C5F;}
+    .os-completed{background:#E8F5EE;color:#2D8C5F;}
+    .os-cancelled{background:#FDECEA;color:#C0392B;}
+    .badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:.7rem;font-weight:600;letter-spacing:.04em;}
+    .badge-green{background:#E8F5EE;color:#2D8C5F;}
+    .badge-gold{background:#F5EDD3;color:#4A3D30;}
+    .badge-red{background:#FDECEA;color:#C0392B;}
+    .toast{position:fixed;bottom:2rem;right:2rem;z-index:9999;background:#1A1410;color:#FFFFFF;padding:12px 20px;border-radius:6px;font-size:.85rem;border-left:3px solid #C9A84C;transform:translateY(20px);opacity:0;transition:all .3s;pointer-events:none;}
+    .toast.show{transform:none;opacity:1;}
+    .text-gold{color:#C9A84C;}
+    
+    /* Product Form Modal */
+    .form-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:1rem;}
+    .form-modal-overlay.hidden{display:none;}
+    .form-modal{background:#FFFFFF;border-radius:16px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;}
+    .fm-header{padding:1.5rem 2rem;border-bottom:1px solid rgba(0,0,0,.07);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#FFFFFF;z-index:1;}
+    .fm-title{font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:600;}
+    .fm-close{background:none;border:none;font-size:1.2rem;color:#7A6850;cursor:pointer;}
+    .fm-body{padding:2rem;}
+    .fm-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;}
+    .fm-row.full{grid-template-columns:1fr;}
+    .fm-group{display:flex;flex-direction:column;gap:.35rem;}
+    .fm-label{font-size:.75rem;font-weight:600;color:#7A6850;letter-spacing:.04em;}
+    .fm-label em{color:#C0392B;}
+    .fm-input{padding:10px 14px;border:1px solid rgba(0,0,0,.12);border-radius:6px;font-size:.88rem;color:#2B2218;transition:border .2s;}
+    .fm-input:focus{outline:none;border-color:#C9A84C;}
+    .fm-select{padding:10px 14px;border:1px solid rgba(0,0,0,.12);border-radius:6px;font-size:.88rem;color:#2B2218;background:#FFFFFF;}
+    .fm-select:focus{outline:none;border-color:#C9A84C;}
+    .fm-textarea{padding:10px 14px;border:1px solid rgba(0,0,0,.12);border-radius:6px;font-size:.88rem;color:#2B2218;resize:vertical;min-height:80px;transition:border .2s;}
+    .fm-textarea:focus{outline:none;border-color:#C9A84C;}
+    .img-upload-area{border:2px dashed rgba(0,0,0,.12);border-radius:8px;padding:2rem;text-align:center;cursor:pointer;transition:all .2s;position:relative;}
+    .img-upload-area:hover{border-color:#C9A84C;background:#F5EDD3;}
+    .img-upload-area input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+    .img-upload-icon{font-size:2rem;margin-bottom:.5rem;color:#7A6850;}
+    .img-upload-text{font-size:.82rem;color:#7A6850;}
+    .img-preview{width:100%;height:160px;object-fit:cover;border-radius:6px;margin-top:1rem;}
+    .img-preview.hidden{display:none;}
+    .fm-footer{display:flex;gap:.75rem;justify-content:flex-end;padding:1.25rem 2rem;border-top:1px solid rgba(0,0,0,.07);}
+    .toggle-wrap{display:flex;align-items:center;gap:.75rem;}
+    .toggle{width:40px;height:22px;background:rgba(0,0,0,.15);border-radius:11px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;}
+    .toggle.on{background:#C9A84C;}
+    .toggle::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#FFFFFF;transition:transform .2s;}
+    .toggle.on::after{transform:translateX(18px);}
+    .toggle-label{font-size:.83rem;color:#2B2218;}
+    
+    @media(max-width:900px){
+      .stats-grid{grid-template-columns:repeat(2,1fr);}
+      .admin-sidebar{transform:translateX(-100%);transition:transform .3s;}
+      .admin-sidebar.open{transform:none;}
+      .admin-main{margin-left:0;}
+    }
+    @media(max-width:600px){
+      .stats-grid{grid-template-columns:1fr 1fr;}
+      .fm-row{grid-template-columns:1fr;}
+      .admin-search input{width:120px;}
+    }
+  </style>
+</head>
+<body>
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ===== ADMIN SCREEN ===== -->
+  <div id="adminScreen">
+    <nav class="admin-sidebar" id="adminSidebar">
+      <div class="admin-logo">
+        <div class="admin-logo-text">OnePrime Admin</div>
+        <div class="admin-logo-sub">管理后台 · PORTAL</div>
+      </div>
+      <div class="admin-nav">
+        <div class="admin-nav-item active" onclick="showAdminPanel('dashboard')"><span class="admin-nav-icon">📊</span>数据概览</div>
+        <div class="admin-nav-item" onclick="showAdminPanel('products')"><span class="admin-nav-icon">📦</span>商品管理</div>
+        <div class="admin-nav-item" onclick="showAdminPanel('orders')"><span class="admin-nav-icon">🧾</span>订单管理</div>
+        <div class="admin-nav-item" onclick="showAdminPanel('users')"><span class="admin-nav-icon">👥</span>用户管理</div>
+        <div class="admin-nav-item" onclick="showAdminPanel('categories')"><span class="admin-nav-icon">🗂</span>分类管理</div>
+      </div>
+      <div class="admin-footer">
+        <button class="admin-logout" onclick="logout()">退出后台</button>
+      </div>
+    </nav>
+    <main class="admin-main">
+      <div class="admin-topbar">
+        <div class="admin-page-title" id="adminPageTitle">数据概览</div>
+        <div style="display:flex;align-items:center;gap:.75rem;">
+          <div class="sh-avatar" id="adminAvatar">A</div>
+          <span style="font-size:.82rem;color:#7A6850;" id="adminName">管理员</span>
+        </div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <div class="admin-panel active" id="panel-dashboard">
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-label">总商品数</div><div class="stat-value" id="statProducts">0</div><div class="stat-change up" id="statProductsChange"></div></div>
+          <div class="stat-card"><div class="stat-label">总订单数</div><div class="stat-value" id="statOrders">0</div><div class="stat-change up">↑ 本月新增</div></div>
+          <div class="stat-card"><div class="stat-label">注册用户</div><div class="stat-value" id="statUsers">0</div><div class="stat-change up">↑ 持续增长</div></div>
+          <div class="stat-card"><div class="stat-label">本月收入</div><div class="stat-value text-gold" id="statRevenue">¥0</div><div class="stat-change up">已完成订单</div></div>
+        </div>
+        <div class="admin-card">
+          <div class="admin-card-header"><div class="admin-card-title">各分类商品分布</div></div>
+          <div style="padding:1.5rem;display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;" id="catStatsGrid"></div>
+        </div>
+        <div style="margin-top:1.25rem;" class="admin-card">
+          <div class="admin-card-header"><div class="admin-card-title">最近订单</div></div>
+          <div class="orders-table-wrap"><table><thead><tr><th>订单号</th><th>买家</th><th>金额</th><th>状态</th><th>时间</th></tr></thead><tbody id="recentOrdersBody"></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- PRODUCTS -->
+      <div class="admin-panel" id="panel-products">
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+              <div class="admin-search"><input type="text" placeholder="搜索商品名称…" id="prodSearch" oninput="renderAdminProducts()"></div>
+              <select class="filter-select" id="prodCatFilter" onchange="renderAdminProducts()">
+                <option value="all">所有分类</option>
+                <option value="wine">红酒</option>
+                <option value="health">大健康</option>
+                <option value="beauty">美妆护肤</option>
+                <option value="food">功能性食品</option>
+              </select>
+            </div>
+            <button class="admin-btn admin-btn-gold" onclick="openProductForm()">+ 添加商品</button>
+          </div>
+          <div class="orders-table-wrap">
+            <table>
+              <thead><tr><th>图片</th><th>商品名称</th><th>分类</th><th>价格</th><th>原价</th><th>库存</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody id="adminProductsBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="prodPagination"></div>
+        </div>
+      </div>
+
+      <!-- ORDERS -->
+      <div class="admin-panel" id="panel-orders">
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <div class="admin-card-title">所有订单</div>
+            <select class="filter-select" id="orderStatusFilter" onchange="renderOrders()">
+              <option value="all">所有状态</option>
+              <option value="pending">待付款</option>
+              <option value="processing">处理中</option>
+              <option value="shipped">已发货</option>
+              <option value="completed">已完成</option>
+              <option value="cancelled">已取消</option>
+            </select>
+          </div>
+          <div class="orders-table-wrap">
+            <table><thead><tr><th>订单号</th><th>买家</th><th>商品</th><th>金额</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+            <tbody id="ordersBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- USERS -->
+      <div class="admin-panel" id="panel-users">
+        <div class="admin-card">
+          <div class="admin-card-header"><div class="admin-card-title">注册用户</div></div>
+          <div class="orders-table-wrap">
+            <table><thead><tr><th>用户名</th><th>邮箱</th><th>注册方式</th><th>注册时间</th><th>状态</th></tr></thead>
+            <tbody id="usersBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- CATEGORIES -->
+      <div class="admin-panel" id="panel-categories">
+        <div class="admin-card">
+          <div class="admin-card-header"><div class="admin-card-title">分类管理</div></div>
+          <div style="padding:1.5rem;display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;" id="catManageGrid"></div>
+        </div>
+      </div>
+
+    </main>
+  </div><!-- /adminScreen -->
+
+  <!-- PRODUCT FORM MODAL -->
+  <div class="form-modal-overlay hidden" id="productFormModal">
+    <div class="form-modal">
+      <div class="fm-header">
+        <div class="fm-title" id="fmTitle">添加商品</div>
+        <button class="fm-close" onclick="closeProductForm()">✕</button>
+      </div>
+      <div class="fm-body">
+        <input type="hidden" id="fmId">
+        <div class="fm-row">
+          <div class="fm-group">
+            <label class="fm-label">商品名称 <em>*</em></label>
+            <input class="fm-input" id="fmName" placeholder="输入商品名称" />
+          </div>
+          <div class="fm-group">
+            <label class="fm-label">英文名称</label>
+            <input class="fm-input" id="fmNameEn" placeholder="Product name in English" />
+          </div>
+        </div>
+        <div class="fm-row full">
+          <div class="fm-group">
+            <label class="fm-label">商品描述 <em>*</em></label>
+            <textarea class="fm-textarea" id="fmDesc" placeholder="详细描述商品特点、成分、使用方法等"></textarea>
+          </div>
+        </div>
+        <div class="fm-row">
+          <div class="fm-group">
+            <label class="fm-label">商品分类 <em>*</em></label>
+            <select class="fm-select" id="fmCat">
+              <option value="wine">🍷 红酒</option>
+              <option value="health">💊 大健康</option>
+              <option value="beauty">✨ 美妆护肤</option>
+              <option value="food">🌿 功能性食品</option>
+            </select>
+          </div>
+          <div class="fm-group">
+            <label class="fm-label">库存数量</label>
+            <input class="fm-input" id="fmStock" type="number" placeholder="0" min="0" />
+          </div>
+        </div>
+        <div class="fm-row">
+          <div class="fm-group">
+            <label class="fm-label">售价（元） <em>*</em></label>
+            <input class="fm-input" id="fmPrice" type="number" placeholder="0.00" step="0.01" />
+          </div>
+          <div class="fm-group">
+            <label class="fm-label">原价（元，可选）</label>
+            <input class="fm-input" id="fmOrigPrice" type="number" placeholder="0.00" step="0.01" />
+          </div>
+        </div>
+        <div class="fm-row full">
+          <div class="fm-group">
+            <label class="fm-label">商品图片</label>
+            <div class="img-upload-area" id="imgUploadArea">
+              <input type="file" id="fmImg" accept="image/*" onchange="handleImgUpload(event)">
+              <div class="img-upload-icon">📷</div>
+              <div class="img-upload-text">点击或拖拽上传图片<br><span style="font-size:.72rem;color:#aaa;">支持 JPG、PNG、WebP，建议正方形，≤ 5MB</span></div>
+            </div>
+            <img id="imgPreview" class="img-preview hidden" />
+            <input type="hidden" id="fmImgData">
+          </div>
+        </div>
+        <div class="fm-row full">
+          <div class="fm-group">
+            <label class="fm-label">上架状态</label>
+            <div class="toggle-wrap">
+              <div class="toggle on" id="fmActiveToggle" onclick="toggleActive()"></div>
+              <span class="toggle-label" id="fmActiveLabel">已上架</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fm-footer">
+        <button class="admin-btn admin-btn-outline" onclick="closeProductForm()">取消</button>
+        <button class="admin-btn admin-btn-gold" onclick="saveProduct()">保存商品</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/script.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

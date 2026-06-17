@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>OnePrime 恒旺国际 · 品质生活商城</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ===== AUTH MODAL ===== -->
+  <div class="screen" id="authScreen" style="position:fixed;inset:0;z-index:500;background:rgba(10,6,4,0.88);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:1rem;min-height:0;">
+    <div class="auth-box" style="position:relative;">
+      <button class="auth-modal-close" onclick="closeAuthModal()">✕</button>
+      <div class="auth-logo">OnePrime</div>
+      <div class="auth-logo-sub">恒旺国际 · 品质生活商城</div>
+      <div id="authLogin">
+        <div class="auth-title">Welcome back</div>
+        <div class="auth-sub">登录您的账户继续购物</div>
+        <button class="social-btn" onclick="socialLogin('Google')">
+          <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.859-3.048.859-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"/><path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.962L3.964 6.294C4.672 4.167 6.656 3.58 9 3.58z"/></svg>
+          Continue with Google
+        </button>
+        <button class="social-btn" onclick="socialLogin('Apple')">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="white"><path d="M14.048 9.368c-.02-1.98 1.622-2.944 1.694-2.99-.924-1.35-2.36-1.535-2.87-1.552-1.22-.124-2.384.72-3.002.72-.618 0-1.573-.704-2.587-.684-1.327.02-2.558.773-3.24 1.96-1.387 2.4-.354 5.962 1 7.908.667.956 1.462 2.032 2.503 1.994 1.007-.04 1.386-.648 2.603-.648 1.217 0 1.558.648 2.616.628 1.083-.02 1.766-.977 2.428-1.937.768-1.107 1.082-2.19 1.1-2.244-.024-.01-2.1-.806-2.123-3.155zm-1.99-5.797c.553-.67.927-1.596.824-2.521-.796.033-1.76.53-2.33 1.199-.51.59-.959 1.53-.84 2.435.89.069 1.793-.453 2.346-1.113z"/></svg>
+          Continue with Apple
+        </button>
+        <button class="social-btn" onclick="socialLogin('Facebook')">
+          <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#1877F2" d="M18 9a9 9 0 10-10.406 8.892V11.62H5.31V9h2.284V7.01c0-2.254 1.343-3.5 3.397-3.5.984 0 2.013.176 2.013.176V5.9h-1.134c-1.117 0-1.466.693-1.466 1.404V9h2.495l-.399 2.62H10.4v6.272A9.003 9.003 0 0018 9z"/></svg>
+          Continue with Facebook
+        </button>
+        <div class="auth-divider">或使用邮箱</div>
+        <input class="auth-input" type="email" id="loginEmail" placeholder="邮箱地址" />
+        <input class="auth-input" type="password" id="loginPwd" placeholder="密码" />
+        <button class="auth-btn" onclick="emailLogin()">登录</button>
+        <div class="auth-toggle">还没有账户？<a onclick="switchAuthMode('register')">立即注册</a></div>
+      </div>
+      <div id="authRegister" class="hidden">
+        <div class="auth-title">创建账户</div>
+        <div class="auth-sub">注册获得专属会员权益</div>
+        <input class="auth-input" type="text" id="regName" placeholder="姓名" />
+        <input class="auth-input" type="email" id="regEmail" placeholder="邮箱地址" />
+        <input class="auth-input" type="password" id="regPwd" placeholder="密码（至少6位）" />
+        <button class="auth-btn" onclick="emailRegister()">注册</button>
+        <div class="auth-toggle">已有账户？<a onclick="switchAuthMode('login')">返回登录</a></div>
+      </div>
+      <div class="auth-admin-link" onclick="adminLogin()">⚙ 管理员后台入口</div>
+    </div>
+  </div>
+
+  <!-- ===== SHOP SCREEN ===== -->
+  <div class="screen active" id="shopScreen">
+    <!-- Header -->
+    <header class="shop-header">
+      <a class="sh-logo" onclick="showPage('home')">OnePrime<span>恒旺国际</span></a>
+      <ul class="sh-nav">
+        <li><a onclick="showPage('home')" data-page="home">首页</a></li>
+        <li><a onclick="showCategory('wine')" data-page="wine">🍷 红酒</a></li>
+        <li><a onclick="showCategory('health')" data-page="health">💊 大健康</a></li>
+        <li><a onclick="showCategory('beauty')" data-page="beauty">✨ 美妆护肤</a></li>
+        <li><a onclick="showCategory('food')" data-page="food">🌿 功能性食品</a></li>
+      </ul>
+      <div class="sh-right">
+        <button class="cart-btn" onclick="toggleCart()">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+          <span class="cart-count" id="cartCount">0</span>
+        </button>
+        <div id="headerGuest">
+          <button class="nav-login-btn" onclick="openAuthModal()">登录 / 注册</button>
+        </div>
+        <div id="headerUser" style="display:none;position:relative;">
+          <div class="sh-user" onclick="toggleUserDropdown()">
+            <div class="sh-avatar" id="userAvatar">U</div>
+            <span id="userNameDisplay" style="color:rgba(255,255,255,0.6);font-size:.78rem;"></span>
+            <span style="color:rgba(255,255,255,0.3);font-size:.65rem;margin-left:.2rem;">▾</span>
+          </div>
+          <div id="userDropdown" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:var(--deep);border:1px solid rgba(201,168,76,0.2);border-radius:8px;min-width:140px;overflow:hidden;z-index:100;">
+            <div style="padding:.6rem 1rem;font-size:.78rem;color:rgba(255,255,255,0.35);border-bottom:1px solid rgba(255,255,255,0.06);" id="dropUserEmail"></div>
+            <button onclick="logout()" style="width:100%;text-align:left;padding:.7rem 1rem;background:none;border:none;color:rgba(255,255,255,0.6);font-size:.82rem;cursor:pointer;" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='rgba(255,255,255,0.6)'">退出登录</button>
+          </div>
+        </div>
+        <button class="ham-btn" onclick="toggleMobileNav()"><span></span><span></span><span></span></button>
+      </div>
+    </header>
+
+    <!-- Mobile Nav -->
+    <div class="mobile-nav" id="mobileNav">
+      <button class="mobile-nav-close" onclick="toggleMobileNav()">✕</button>
+      <a onclick="showPage('home');toggleMobileNav()">首页</a>
+      <a onclick="showCategory('wine');toggleMobileNav()">🍷 红酒</a>
+      <a onclick="showCategory('health');toggleMobileNav()">💊 大健康</a>
+      <a onclick="showCategory('beauty');toggleMobileNav()">✨ 美妆护肤</a>
+      <a onclick="showCategory('food');toggleMobileNav()">🌿 功能性食品</a>
+      <a onclick="toggleCart();toggleMobileNav()" style="color:var(--gold);">🛒 购物车</a>
+      <a id="mobileLoginLink" onclick="openAuthModal();toggleMobileNav()" style="color:rgba(255,255,255,0.5);font-size:.9rem;">登录 / 注册</a>
+      <a id="mobileLogoutLink" onclick="logout();toggleMobileNav()" style="display:none;color:rgba(255,255,255,0.4);font-size:.85rem;">退出登录</a>
+    </div>
+
+    <!-- HOME PAGE -->
+    <div id="page-home">
+      <div class="shop-hero">
+        <h1>澳洲<em>品质生活</em>精选<br>直达您的餐桌</h1>
+        <p>源头直供 · 假一赔千 · 官方授权 · 全程冷链</p>
+      </div>
+      <div class="category-strip">
+        <div class="cat-card" onclick="showCategory('wine')">
+          <div class="cat-icon">🍷</div>
+          <div class="cat-name">澳洲进口红酒</div>
+          <div class="cat-en">AUSTRALIAN RED WINE</div>
+          <div class="cat-count" id="cat-count-wine">— 款</div>
+        </div>
+        <div class="cat-card" onclick="showCategory('health')">
+          <div class="cat-icon">💊</div>
+          <div class="cat-name">大健康保健品</div>
+          <div class="cat-en">HEALTH SUPPLEMENTS</div>
+          <div class="cat-count" id="cat-count-health">— 款</div>
+        </div>
+        <div class="cat-card" onclick="showCategory('beauty')">
+          <div class="cat-icon">✨</div>
+          <div class="cat-name">美妆护肤</div>
+          <div class="cat-en">BEAUTY & SKINCARE</div>
+          <div class="cat-count" id="cat-count-beauty">— 款</div>
+        </div>
+        <div class="cat-card" onclick="showCategory('food')">
+          <div class="cat-icon">🌿</div>
+          <div class="cat-name">功能性食品</div>
+          <div class="cat-en">FUNCTIONAL FOODS</div>
+          <div class="cat-count" id="cat-count-food">— 款</div>
+        </div>
+      </div>
+      <div class="products-section">
+        <div class="products-header">
+          <h2 class="products-title">全部商品</h2>
+          <div class="filter-bar" id="homeFilter">
+            <button class="filter-btn active" onclick="filterHome('all',this)">全部</button>
+            <button class="filter-btn" onclick="filterHome('wine',this)">红酒</button>
+            <button class="filter-btn" onclick="filterHome('health',this)">大健康</button>
+            <button class="filter-btn" onclick="filterHome('beauty',this)">美妆</button>
+            <button class="filter-btn" onclick="filterHome('food',this)">功能食品</button>
+          </div>
+        </div>
+        <div class="product-grid" id="homeProductGrid"></div>
+      </div>
+    </div>
+
+    <!-- CATEGORY PAGE -->
+    <div id="page-category" class="hidden">
+      <div class="shop-hero" id="catHero" style="padding:50px 5vw 40px;">
+        <div style="font-size:.65rem;letter-spacing:.25em;color:var(--gold);margin-bottom:.75rem;" id="catLabel"></div>
+        <h1 id="catTitle" style="font-size:clamp(1.5rem,4vw,2.5rem);"></h1>
+        <p id="catSub"></p>
+      </div>
+      <div class="products-section">
+        <div class="products-header">
+          <h2 class="products-title" id="catProductTitle"></h2>
+          <div style="display:flex;gap:.5rem;align-items:center;">
+            <select class="filter-select" id="catSort" onchange="sortProducts()">
+              <option value="default">默认排序</option>
+              <option value="price-asc">价格从低到高</option>
+              <option value="price-desc">价格从高到低</option>
+            </select>
+          </div>
+        </div>
+        <div class="product-grid" id="catProductGrid"></div>
+      </div>
+    </div>
+
+    <!-- CHECKOUT PAGE -->
+    <div id="page-checkout" class="hidden">
+      <div class="checkout-wrap">
+        <div class="checkout-title">结算 · Checkout</div>
+        <div class="checkout-grid">
+          <div>
+            <div class="checkout-section">
+              <div class="cs-title">收货信息</div>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">姓名</label><input class="form-input" placeholder="收件人姓名" id="ck-name"/></div>
+                <div class="form-group"><label class="form-label">手机</label><input class="form-input" placeholder="手机号码" id="ck-phone"/></div>
+              </div>
+              <div class="form-row full">
+                <div class="form-group"><label class="form-label">省市区</label><input class="form-input" placeholder="例：广东省深圳市南山区" id="ck-city"/></div>
+              </div>
+              <div class="form-row full">
+                <div class="form-group"><label class="form-label">详细地址</label><input class="form-input" placeholder="街道、小区、门牌号" id="ck-addr"/></div>
+              </div>
+            </div>
+            <div class="checkout-section">
+              <div class="cs-title">支付方式</div>
+              <div style="display:flex;flex-direction:column;gap:.6rem;">
+                <label style="display:flex;align-items:center;gap:.75rem;padding:.9rem;border:1px solid var(--gold);border-radius:6px;cursor:pointer;font-size:.85rem;">
+                  <input type="radio" name="pay" value="wechat" checked> <span>💚 微信支付</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:.75rem;padding:.9rem;border:1px solid rgba(0,0,0,.1);border-radius:6px;cursor:pointer;font-size:.85rem;">
+                  <input type="radio" name="pay" value="alipay"> <span>🔵 支付宝</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:.75rem;padding:.9rem;border:1px solid rgba(0,0,0,.1);border-radius:6px;cursor:pointer;font-size:.85rem;">
+                  <input type="radio" name="pay" value="bank"> <span>🏦 银行卡</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="order-summary-box">
+            <div class="os-title">订单汇总</div>
+            <div class="os-items" id="ckItems"></div>
+            <hr class="os-divider">
+            <div class="os-total"><span class="os-total-label">合计</span><span class="os-total-price" id="ckTotal">¥0</span></div>
+            <button class="place-order-btn" onclick="placeOrder()">立即下单</button>
+            <div class="security-note">🔒 安全支付 · 7天无理由退换 · 全程溯源可查</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /shopScreen -->
+
+  <!-- ===== CART DRAWER ===== -->
+  <div class="cart-overlay" id="cartOverlay" onclick="toggleCart()"></div>
+  <div class="cart-drawer" id="cartDrawer">
+    <div class="cart-head">
+      <h3>购物车</h3>
+      <button class="cart-close" onclick="toggleCart()">✕</button>
+    </div>
+    <div class="cart-items" id="cartItems"></div>
+    <div class="cart-foot" id="cartFoot"></div>
+  </div>
+
+  <!-- PRODUCT MODAL -->
+  <div class="modal-overlay" id="prodModal" onclick="closeProdModal(event)">
+    <div class="modal-box" id="prodModalBox">
+      <button class="modal-close" onclick="closeProdModalDirect()">✕</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script src="js/script.js"></script>
+</body>
+</html>
