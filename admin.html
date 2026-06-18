@@ -52,6 +52,9 @@ if (entered !== ADMIN_PASSWORD) {
     .admin-panel.active{display:block;}
     .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.25rem;margin-bottom:2rem;}
     .stat-card{background:#FFFFFF;border-radius:10px;padding:1.5rem;border:1px solid rgba(0,0,0,.05);}
+    .stat-card-link{cursor:pointer;transition:all .2s;}
+    .stat-card-link:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08);border-color:rgba(201,168,76,0.3);}
+    .stat-card-link:active{transform:translateY(0);}
     .stat-label{font-size:.72rem;letter-spacing:.08em;color:#7A6850;margin-bottom:.5rem;}
     .stat-value{font-family:'Playfair Display',serif;font-size:1.75rem;font-weight:700;}
     .stat-change{font-size:.72rem;margin-top:.3rem;}
@@ -193,7 +196,32 @@ if (entered !== ADMIN_PASSWORD) {
     .toggle::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#FFFFFF;transition:transform .2s;}
     .toggle.on::after{transform:translateX(18px);}
     .toggle-label{font-size:.83rem;color:#2B2218;}
-    
+
+    /* ===== CATEGORY DISTRIBUTION (clickable) =====
+       Replaces the old separate "分类管理" tab — clicking a category card
+       here jumps straight to 商品管理 pre-filtered to that category. */
+    .cat-stats-grid{padding:1.5rem;display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;}
+    .cat-stat-card{text-align:center;padding:1.25rem;border:1px solid rgba(0,0,0,.06);border-radius:8px;cursor:pointer;transition:all .2s;background:#FFFFFF;}
+    .cat-stat-card:hover{border-color:rgba(201,168,76,0.4);box-shadow:0 6px 20px rgba(0,0,0,.08);transform:translateY(-2px);}
+    .cat-stat-card:active{transform:translateY(0);}
+    .cat-stat-icon{font-size:2rem;margin-bottom:.5rem;}
+    .cat-stat-count{font-weight:700;font-size:1.4rem;color:#C9A84C;}
+    .cat-stat-label{font-size:.75rem;color:#7A6850;margin-bottom:.25rem;}
+    .cat-stat-active{font-size:.7rem;color:#2D8C5F;}
+
+    /* ===== REVENUE TREND PANEL ===== */
+    .revenue-range-tabs{display:flex;gap:.4rem;}
+    .range-tab{padding:6px 14px;border-radius:4px;border:1px solid rgba(0,0,0,.1);background:transparent;font-size:.78rem;color:#7A6850;cursor:pointer;transition:all .2s;}
+    .range-tab.active,.range-tab:hover{background:#C9A84C;border-color:#C9A84C;color:#1A1410;font-weight:600;}
+    .revenue-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;padding:1.5rem;border-bottom:1px solid rgba(0,0,0,.06);}
+    .rs-item{text-align:center;}
+    .rs-label{font-size:.72rem;color:#7A6850;margin-bottom:.4rem;letter-spacing:.05em;}
+    .rs-value{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;color:#C9A84C;}
+    .revenue-chart-wrap{padding:1.5rem;}
+    .revenue-chart{width:100%;height:280px;display:block;overflow:visible;}
+    .revenue-demo-note{padding:1rem 1.5rem 1.5rem;font-size:.76rem;color:#7A6850;line-height:1.6;border-top:1px solid rgba(0,0,0,.06);}
+    .revenue-demo-note strong{color:#C0392B;}
+
     @media(max-width:900px){
       .stats-grid{grid-template-columns:repeat(2,1fr);}
       /* Mobile: the vertical sidebar becomes a horizontal tab bar pinned to
@@ -283,6 +311,12 @@ if (entered !== ADMIN_PASSWORD) {
       .order-cards{display:block;}
       .users-table-only{display:none;}
       .user-cards{display:block;}
+
+      /* iPad/tablet: 4-column category distribution and 3-column revenue
+         summary are too cramped — drop to 2 columns so labels don't wrap
+         into illegible multi-line text. */
+      .cat-stats-grid{grid-template-columns:repeat(2,1fr);}
+      .revenue-summary{grid-template-columns:repeat(3,1fr);}
     }
     @media(max-width:600px){
       .stats-grid{grid-template-columns:1fr 1fr;}
@@ -294,6 +328,13 @@ if (entered !== ADMIN_PASSWORD) {
       .admin-card-header{flex-direction:column;align-items:stretch;}
       .admin-card-header > div:first-child{flex-direction:column;align-items:stretch;}
       .admin-search input{width:100%;}
+      /* Phones: category distribution stays at 2 columns (icons are large
+         enough not to feel cramped); revenue summary drops to 1 column so
+         the three numbers don't squeeze into illegible widths. */
+      .cat-stats-grid{grid-template-columns:1fr 1fr;}
+      .revenue-summary{grid-template-columns:1fr;gap:.75rem;}
+      .revenue-range-tabs{width:100%;}
+      .range-tab{flex:1;}
     }
   </style>
 </head>
@@ -313,7 +354,7 @@ if (entered !== ADMIN_PASSWORD) {
         <div class="admin-nav-item" onclick="showAdminPanel('products')"><span class="admin-nav-icon">📦</span>商品管理</div>
         <div class="admin-nav-item" onclick="showAdminPanel('orders')"><span class="admin-nav-icon">🧾</span>订单管理</div>
         <div class="admin-nav-item" onclick="showAdminPanel('users')"><span class="admin-nav-icon">👥</span>用户管理</div>
-        <div class="admin-nav-item" onclick="showAdminPanel('categories')"><span class="admin-nav-icon">🗂</span>分类管理</div>
+        <div class="admin-nav-item" onclick="showAdminPanel('revenue')"><span class="admin-nav-icon">📈</span>收入趋势</div>
       </div>
       <div class="admin-footer">
         <button class="admin-logout" onclick="logout()">退出后台</button>
@@ -331,10 +372,10 @@ if (entered !== ADMIN_PASSWORD) {
       <!-- DASHBOARD -->
       <div class="admin-panel active" id="panel-dashboard">
         <div class="stats-grid">
-          <div class="stat-card"><div class="stat-label">总商品数</div><div class="stat-value" id="statProducts">0</div><div class="stat-change up" id="statProductsChange"></div></div>
-          <div class="stat-card"><div class="stat-label">总订单数</div><div class="stat-value" id="statOrders">0</div><div class="stat-change up">↑ 本月新增</div></div>
-          <div class="stat-card"><div class="stat-label">注册用户</div><div class="stat-value" id="statUsers">0</div><div class="stat-change up">↑ 持续增长</div></div>
-          <div class="stat-card"><div class="stat-label">本月收入</div><div class="stat-value text-gold" id="statRevenue">¥0</div><div class="stat-change up">已完成订单</div></div>
+          <div class="stat-card stat-card-link" onclick="showAdminPanel('products')"><div class="stat-label">总商品数</div><div class="stat-value" id="statProducts">0</div><div class="stat-change up" id="statProductsChange"></div></div>
+          <div class="stat-card stat-card-link" onclick="showAdminPanel('orders')"><div class="stat-label">总订单数</div><div class="stat-value" id="statOrders">0</div><div class="stat-change up">↑ 本月新增</div></div>
+          <div class="stat-card stat-card-link" onclick="showAdminPanel('users')"><div class="stat-label">注册用户</div><div class="stat-value" id="statUsers">0</div><div class="stat-change up">↑ 持续增长</div></div>
+          <div class="stat-card stat-card-link" onclick="showAdminPanel('revenue')"><div class="stat-label">本月收入</div><div class="stat-value text-gold" id="statRevenue">¥0</div><div class="stat-change up">已完成订单 · 查看趋势 →</div></div>
         </div>
         <div class="admin-card">
           <div class="admin-card-header"><div class="admin-card-title">各分类商品分布</div></div>
@@ -420,11 +461,22 @@ if (entered !== ADMIN_PASSWORD) {
         </div>
       </div>
 
-      <!-- CATEGORIES -->
-      <div class="admin-panel" id="panel-categories">
+      <!-- REVENUE TREND -->
+      <div class="admin-panel" id="panel-revenue">
         <div class="admin-card">
-          <div class="admin-card-header"><div class="admin-card-title">分类管理</div></div>
-          <div class="cat-manage-grid" id="catManageGrid"></div>
+          <div class="admin-card-header">
+            <div class="admin-card-title">收入趋势</div>
+            <div class="revenue-range-tabs" id="revenueRangeTabs">
+              <button class="range-tab active" data-range="day" onclick="setRevenueRange('day')">按日</button>
+              <button class="range-tab" data-range="month" onclick="setRevenueRange('month')">按月</button>
+              <button class="range-tab" data-range="year" onclick="setRevenueRange('year')">按年</button>
+            </div>
+          </div>
+          <div class="revenue-summary" id="revenueSummary"></div>
+          <div class="revenue-chart-wrap">
+            <svg id="revenueChart" class="revenue-chart" viewBox="0 0 800 280" preserveAspectRatio="none"></svg>
+          </div>
+          <div class="revenue-demo-note">📌 图表包含<strong>示例历史数据</strong>（标注为"示例"的订单）用于展示走势效果；真实订单数据会随业务增长自动汇入同一张图，示例数据不计入"数据概览"页的总订单数/收入统计。</div>
         </div>
       </div>
 

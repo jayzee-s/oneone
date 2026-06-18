@@ -58,13 +58,59 @@ function initData(){
   }
   if(!localStorage.getItem('oneprime_orders')){
     const now=Date.now();
-    localStorage.setItem('oneprime_orders',JSON.stringify([
+    const realOrders=[
       {id:'ORD2025001',userId:2,userName:'张小姐',items:[{name:'慕易庄园赤霞珠',qty:2,price:298}],total:596,status:'completed',createdAt:new Date(now-86400000*3).toISOString()},
       {id:'ORD2025002',userId:3,userName:'李先生',items:[{name:'Swisse 护肝片',qty:1,price:188}],total:188,status:'shipped',createdAt:new Date(now-86400000*1).toISOString()},
       {id:'ORD2025003',userId:4,userName:'王女士',items:[{name:'胶原蛋白软糖',qty:3,price:128}],total:384,status:'processing',createdAt:new Date(now-3600000).toISOString()},
-    ]));
+    ];
+    localStorage.setItem('oneprime_orders',JSON.stringify(realOrders.concat(generateDemoRevenueOrders(now))));
   }
   loadData();
+}
+
+// Generates ~2 years of fake "completed" orders purely so the 收入趋势
+// (revenue trend) chart has enough spread to demonstrate day/month/year
+// breakdowns before real order volume builds up. Every one of these is
+// tagged isDemo:true and given a "DEMO" id prefix + a userName suffix of
+// "（示例）" so it's unmistakable as sample data wherever it surfaces —
+// the dashboard's 总订单数/本月收入/最近订单 all explicitly filter these
+// out (see refreshAdminDashboard in admin.js), so they only ever appear
+// inside the revenue chart itself.
+function generateDemoRevenueOrders(now){
+  const demo=[];
+  const demoBuyers=['示例买家A','示例买家B','示例买家C','示例买家D'];
+  const sampleItems=[
+    {name:'慕易庄园赤霞珠干红2021',price:298},
+    {name:'Blackmores 鱼油胶囊',price:298},
+    {name:'Jurlique 玫瑰水面膜套装',price:488},
+    {name:'胶原蛋白软糖',price:128},
+    {name:'麦卢卡蜂蜜 UMF15+',price:368},
+  ];
+  let counter=1;
+  // Spread roughly 2-5 orders per month across the past 24 months so
+  // "按日/按月/按年" all have multiple buckets to render.
+  for(let monthsAgo=23;monthsAgo>=0;monthsAgo--){
+    const orderCount=2+Math.floor(Math.random()*4); // 2-5 per month
+    for(let j=0;j<orderCount;j++){
+      const d=new Date(now);
+      d.setMonth(d.getMonth()-monthsAgo);
+      d.setDate(1+Math.floor(Math.random()*27));
+      d.setHours(Math.floor(Math.random()*23),Math.floor(Math.random()*59));
+      const item=sampleItems[Math.floor(Math.random()*sampleItems.length)];
+      const qty=1+Math.floor(Math.random()*3);
+      demo.push({
+        id:'DEMO'+String(counter++).padStart(4,'0'),
+        userId:null,
+        userName:demoBuyers[Math.floor(Math.random()*demoBuyers.length)]+'（示例）',
+        items:[{name:item.name,qty:qty,price:item.price}],
+        total:item.price*qty,
+        status:'completed',
+        createdAt:d.toISOString(),
+        isDemo:true,
+      });
+    }
+  }
+  return demo;
 }
 
 function loadData(){

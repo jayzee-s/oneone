@@ -34,16 +34,31 @@ function showAdminPanel(name) {
   document.querySelectorAll('.admin-nav-item').forEach(function(i) {
     i.classList.remove('active');
   });
-  var titles = {dashboard:'数据概览', products:'商品管理', orders:'订单管理', users:'用户管理', categories:'分类管理'};
+  var titles = {dashboard:'数据概览', products:'商品管理', orders:'订单管理', users:'用户管理', revenue:'收入趋势'};
   document.getElementById('adminPageTitle').textContent = titles[name] || name;
   var navItems = document.querySelectorAll('.admin-nav-item');
-  var idx = {dashboard:0, products:1, orders:2, users:3, categories:4};
+  var idx = {dashboard:0, products:1, orders:2, users:3, revenue:4};
   if (navItems[idx[name]]) navItems[idx[name]].classList.add('active');
   if (name === 'dashboard') refreshAdminDashboard();
   if (name === 'products') renderAdminProducts();
   if (name === 'orders') renderOrders();
   if (name === 'users') renderUsers();
-  if (name === 'categories') renderCatManage();
+  if (name === 'revenue') renderRevenueChart();
+}
+
+// Jump to 商品管理 pre-filtered to a given category — used by the
+// clickable "各分类商品分布" cards on the dashboard (this used to be a
+// separate "分类管理" tab; folding it into the dashboard cards removes a
+// redundant nav item while keeping the same one-click filtering).
+function goToCategoryProducts(catKey) {
+  showAdminPanel('products');
+  setTimeout(function() {
+    var filterEl = document.getElementById('prodCatFilter');
+    if (filterEl) {
+      filterEl.value = catKey;
+      renderAdminProducts();
+    }
+  }, 50);
 }
 
 // ===== DASHBOARD =====
@@ -52,9 +67,14 @@ function refreshAdminDashboard() {
   document.getElementById('statProducts').textContent = state.products.length;
   var activeCount = state.products.filter(function(p) { return p.active; }).length;
   document.getElementById('statProductsChange').textContent = '↑ ' + activeCount + ' 款已上架';
-  document.getElementById('statOrders').textContent = state.orders.length;
+
+  // Demo/sample orders (used only to make the 收入趋势 chart look populated
+  // before real order volume builds up) are excluded from the dashboard's
+  // real totals — see note in script.js seedDemoRevenueOrders().
+  var realOrders = state.orders.filter(function(o) { return !o.isDemo; });
+  document.getElementById('statOrders').textContent = realOrders.length;
   document.getElementById('statUsers').textContent = state.users.length;
-  var rev = state.orders.filter(function(o) { return o.status === 'completed'; }).reduce(function(s, o) { return s + o.total; }, 0);
+  var rev = realOrders.filter(function(o) { return o.status === 'completed'; }).reduce(function(s, o) { return s + o.total; }, 0);
   document.getElementById('statRevenue').textContent = '¥' + rev.toFixed(0);
   
   var cg = document.getElementById('catStatsGrid');
@@ -63,18 +83,18 @@ function refreshAdminDashboard() {
       var v = CATS[k];
       var cnt = state.products.filter(function(p) { return p.cat === k; }).length;
       var active = state.products.filter(function(p) { return p.cat === k && p.active; }).length;
-      return '<div style="text-align:center;padding:1.25rem;border:1px solid rgba(0,0,0,.06);border-radius:8px;">' +
-        '<div style="font-size:2rem;margin-bottom:.5rem;">' + v.icon + '</div>' +
-        '<div style="font-weight:700;font-size:1.4rem;color:#C9A84C;">' + cnt + '</div>' +
-        '<div style="font-size:.75rem;color:#7A6850;margin-bottom:.25rem;">' + v.label + '</div>' +
-        '<div style="font-size:.7rem;color:#2D8C5F;">' + active + ' 已上架</div>' +
+      return '<div class="cat-stat-card" onclick="goToCategoryProducts(\'' + k + '\')">' +
+        '<div class="cat-stat-icon">' + v.icon + '</div>' +
+        '<div class="cat-stat-count">' + cnt + '</div>' +
+        '<div class="cat-stat-label">' + v.label + '</div>' +
+        '<div class="cat-stat-active">' + active + ' 已上架</div>' +
         '</div>';
     }).join('');
   }
   
   var rb = document.getElementById('recentOrdersBody');
   if (rb) {
-    rb.innerHTML = state.orders.slice(0, 5).map(function(o) {
+    rb.innerHTML = realOrders.slice(0, 5).map(function(o) {
       return '<tr>' +
         '<td style="font-family:monospace;font-size:.75rem;">' + o.id + '</td>' +
         '<td>' + o.userName + '</td>' +
@@ -257,8 +277,13 @@ function goPage(n) {
 
 // ===== ORDERS =====
 function renderOrders() {
+  // Demo/sample orders exist only to populate the 收入趋势 chart with a
+  // believable 2-year trend — they must never appear in the actual order
+  // management list, since an admin could otherwise try to "process" or
+  // change the status of a fake order, or mistake it for a real customer.
+  var realOrders = state.orders.filter(function(o) { return !o.isDemo; });
   var filter = document.getElementById('orderStatusFilter') ? document.getElementById('orderStatusFilter').value : 'all';
-  var orders = filter === 'all' ? state.orders : state.orders.filter(function(o) { return o.status === filter; });
+  var orders = filter === 'all' ? realOrders : realOrders.filter(function(o) { return o.status === filter; });
 
   var tbody = document.getElementById('ordersBody');
   if (tbody) {
@@ -352,26 +377,129 @@ function renderUsers() {
   }
 }
 
-// ===== CATEGORIES =====
-function renderCatManage() {
-  var g = document.getElementById('catManageGrid');
-  if (!g) return;
-  g.innerHTML = Object.keys(CATS).map(function(k) {
-    var v = CATS[k];
-    var total = state.products.filter(function(p) { return p.cat === k; }).length;
-    var active = state.products.filter(function(p) { return p.cat === k && p.active; }).length;
-    return '<div class="cat-manage-card">' +
-      '<div class="cmc-top">' +
-        '<div class="cmc-icon">' + v.icon + '</div>' +
-        '<div class="cmc-info">' +
-          '<div class="cmc-label">' + v.label + '</div>' +
-          '<div class="cmc-en">' + v.en + '</div>' +
-          '<div class="cmc-count">共 <strong>' + total + '</strong> 件 · 上架 <strong class="cmc-active">' + active + '</strong> 件</div>' +
-        '</div>' +
-      '</div>' +
-      '<button class="admin-btn admin-btn-outline cmc-btn" onclick="showAdminPanel(\'products\');setTimeout(function(){document.getElementById(\'prodCatFilter\').value=\'' + k + '\';renderAdminProducts();},100)">查看商品</button>' +
-      '</div>';
-  }).join('');
+// ===== REVENUE TREND =====
+var revenueRange = 'day'; // 'day' | 'month' | 'year'
+
+function setRevenueRange(range) {
+  revenueRange = range;
+  document.querySelectorAll('.range-tab').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-range') === range);
+  });
+  renderRevenueChart();
+}
+
+// Groups completed orders (real + demo) into buckets by day/month/year and
+// draws a simple line+bar SVG chart. No external charting library is used
+// since this project has no build step — plain SVG keeps it dependency-free
+// and consistent with how the rest of the admin UI is built.
+function renderRevenueChart() {
+  loadData();
+  var completed = state.orders.filter(function(o) { return o.status === 'completed'; });
+
+  var buckets = {}; // key -> { total, count, isDemo }
+  completed.forEach(function(o) {
+    var d = new Date(o.createdAt);
+    var key;
+    if (revenueRange === 'day') key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    else if (revenueRange === 'month') key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    else key = String(d.getFullYear());
+    if (!buckets[key]) buckets[key] = { total: 0, count: 0, hasDemo: false, hasReal: false };
+    buckets[key].total += o.total;
+    buckets[key].count += 1;
+    if (o.isDemo) buckets[key].hasDemo = true;
+    else buckets[key].hasReal = true;
+  });
+
+  var keys = Object.keys(buckets).sort();
+  var data = keys.map(function(k) { return { key: k, total: buckets[k].total, count: buckets[k].count, hasDemo: buckets[k].hasDemo, hasReal: buckets[k].hasReal }; });
+
+  renderRevenueSummary(data, completed);
+  drawRevenueChartSvg(data);
+}
+
+function renderRevenueSummary(data, completedOrders) {
+  var el = document.getElementById('revenueSummary');
+  if (!el) return;
+  var total = data.reduce(function(s, d) { return s + d.total; }, 0);
+  var avg = data.length ? total / data.length : 0;
+  var peak = data.reduce(function(max, d) { return d.total > max ? d.total : max; }, 0);
+  var rangeLabel = revenueRange === 'day' ? '日均' : revenueRange === 'month' ? '月均' : '年均';
+  el.innerHTML =
+    '<div class="rs-item"><div class="rs-label">区间总收入</div><div class="rs-value">¥' + total.toFixed(0) + '</div></div>' +
+    '<div class="rs-item"><div class="rs-label">' + rangeLabel + '收入</div><div class="rs-value">¥' + avg.toFixed(0) + '</div></div>' +
+    '<div class="rs-item"><div class="rs-label">单期最高</div><div class="rs-value">¥' + peak.toFixed(0) + '</div></div>';
+}
+
+function drawRevenueChartSvg(data) {
+  var svg = document.getElementById('revenueChart');
+  if (!svg) return;
+  if (!data.length) {
+    svg.innerHTML = '<text x="400" y="140" text-anchor="middle" font-size="14" fill="#7A6850">暂无收入数据</text>';
+    return;
+  }
+
+  var W = 800, H = 280, padL = 50, padR = 20, padT = 20, padB = 40;
+  var chartW = W - padL - padR, chartH = H - padT - padB;
+  var maxVal = Math.max.apply(null, data.map(function(d) { return d.total; })) || 1;
+  var n = data.length;
+  var stepX = n > 1 ? chartW / (n - 1) : 0;
+
+  // Gridlines + Y-axis labels (4 horizontal bands)
+  var grid = '';
+  for (var i = 0; i <= 4; i++) {
+    var y = padT + chartH - (chartH * i / 4);
+    var val = (maxVal * i / 4);
+    grid += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="rgba(0,0,0,0.06)" stroke-width="1"/>';
+    grid += '<text x="' + (padL - 8) + '" y="' + (y + 4) + '" text-anchor="end" font-size="10" fill="#7A6850">¥' + Math.round(val) + '</text>';
+  }
+
+  // Bars (so single-bucket / sparse data is still visible, not just a flat line)
+  var bars = '';
+  var barW = Math.min(28, chartW / n * 0.5);
+  data.forEach(function(d, i) {
+    var x = n > 1 ? padL + i * stepX : padL + chartW / 2;
+    var barH = (d.total / maxVal) * chartH;
+    var y = padT + chartH - barH;
+    var fill = d.hasReal ? 'rgba(201,168,76,0.35)' : 'rgba(122,104,80,0.25)';
+    bars += '<rect x="' + (x - barW/2) + '" y="' + y + '" width="' + barW + '" height="' + Math.max(barH,1) + '" fill="' + fill + '" rx="2"/>';
+  });
+
+  // Line connecting bucket totals
+  var points = data.map(function(d, i) {
+    var x = n > 1 ? padL + i * stepX : padL + chartW / 2;
+    var y = padT + chartH - (d.total / maxVal) * chartH;
+    return x + ',' + y;
+  }).join(' ');
+  var line = '<polyline points="' + points + '" fill="none" stroke="#C9A84C" stroke-width="2.5"/>';
+
+  // Points + x-axis labels (demo buckets get a dashed ring + "示例" label so
+  // they're never mistaken for real revenue at a glance)
+  var dots = '';
+  data.forEach(function(d, i) {
+    var x = n > 1 ? padL + i * stepX : padL + chartW / 2;
+    var y = padT + chartH - (d.total / maxVal) * chartH;
+    var label = formatBucketLabel(d.key);
+    dots += '<circle cx="' + x + '" cy="' + y + '" r="4" fill="#C9A84C"' + (d.hasDemo && !d.hasReal ? ' stroke="#7A6850" stroke-width="1.5" stroke-dasharray="2,2"' : '') + '/>';
+    // Thin out labels if there are many buckets to avoid overlapping text
+    if (n <= 14 || i % Math.ceil(n / 14) === 0) {
+      dots += '<text x="' + x + '" y="' + (H - padB + 16) + '" text-anchor="middle" font-size="9" fill="#7A6850">' + label + (d.hasDemo && !d.hasReal ? ' *' : '') + '</text>';
+    }
+  });
+
+  svg.innerHTML = grid + bars + line + dots +
+    '<text x="' + (W - padR) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" fill="#7A6850" font-style="italic">* 示例数据</text>';
+}
+
+function formatBucketLabel(key) {
+  if (revenueRange === 'day') {
+    var parts = key.split('-');
+    return parts[1] + '/' + parts[2];
+  }
+  if (revenueRange === 'month') {
+    var p2 = key.split('-');
+    return p2[0] + '年' + p2[1] + '月';
+  }
+  return key + '年';
 }
 
 // ===== PRODUCT FORM =====
@@ -501,8 +629,8 @@ loadData();
 // Set default state
 window.state = window.state || {};
 state.productPage = state.productPage || 1;
+state.revenueRange = state.revenueRange || 'day';
 refreshAdminDashboard();
 renderAdminProducts();
 renderOrders();
 renderUsers();
-renderCatManage();
