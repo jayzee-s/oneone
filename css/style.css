@@ -12,7 +12,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text);
 img{max-width:100%;display:block;}
 button,input,select,textarea{font-family:inherit;}
 button{cursor:pointer;}
-
+.cat-stats-grid{padding:1.5rem;display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;}
+.cat-manage-grid{padding:1.5rem;display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;}
 /* ===== UTILS ===== */
 .hidden{display:none!important;}
 .flex{display:flex;}
@@ -299,6 +300,58 @@ tr:hover td{background:rgba(0,0,0,.01);}
 .page-btn{padding:5px 10px;border:1px solid rgba(0,0,0,.1);border-radius:3px;font-size:.75rem;background:var(--white);cursor:pointer;transition:all .2s;}
 .page-btn.active,.page-btn:hover{background:var(--gold);border-color:var(--gold);color:var(--deep);font-weight:600;}
 
+/* ===== MOBILE ADMIN CARD VIEWS =====
+   Mirrors the inline overrides in admin.html so the shared stylesheet
+   doesn't silently drift out of sync. On narrow screens, the products/
+   orders/users tables (which need horizontal scroll to reach columns like
+   原价/库存/状态/操作 or 时间/操作) are replaced with card lists where
+   every field is visible without scrolling sideways. */
+.product-cards,.order-cards,.user-cards{display:none;}
+.prod-admin-card{display:flex;gap:.75rem;align-items:flex-start;padding:.9rem 1rem;border-bottom:1px solid rgba(0,0,0,.06);cursor:pointer;transition:background .15s;}
+.prod-admin-card:last-child{border-bottom:none;}
+.prod-admin-card:active{background:rgba(201,168,76,0.06);}
+.prod-admin-card.selected{background:rgba(201,168,76,0.09);}
+.pac-checkbox{flex-shrink:0;width:20px;height:20px;margin-top:6px;accent-color:var(--gold);cursor:pointer;}
+.pac-img{width:56px;height:56px;border-radius:8px;object-fit:cover;background:var(--cream);flex-shrink:0;}
+.pac-img-ph{width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,#f5f0e8,#ede5d4);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;}
+.pac-body{flex:1;min-width:0;}
+.pac-name{font-weight:700;font-size:.88rem;line-height:1.3;margin-bottom:.3rem;}
+.pac-meta{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-bottom:.4rem;}
+.pac-row{display:flex;justify-content:space-between;align-items:baseline;font-size:.78rem;color:var(--text-muted);}
+.pac-price{font-weight:700;color:var(--gold);font-size:.95rem;}
+.pac-orig{font-size:.7rem;color:var(--text-muted);text-decoration:line-through;margin-left:.3rem;}
+.pac-stock{font-size:.75rem;color:var(--text-muted);}
+
+.batch-bar{display:none;align-items:center;justify-content:space-between;gap:.75rem;padding:.75rem 1rem;background:var(--deep);position:sticky;top:0;z-index:5;}
+.batch-bar.show{display:flex;}
+.batch-bar-info{color:var(--gold-light);font-size:.82rem;font-weight:600;flex-shrink:0;}
+.batch-bar-actions{display:flex;gap:.5rem;flex:1;justify-content:flex-end;flex-wrap:wrap;}
+.batch-btn{padding:7px 12px;border-radius:4px;font-size:.74rem;font-weight:600;border:none;cursor:pointer;white-space:nowrap;}
+.batch-btn-on{background:var(--success);color:var(--white);}
+.batch-btn-off{background:var(--warm);color:var(--white);}
+.batch-btn-del{background:var(--error);color:var(--white);}
+.batch-btn-cancel{background:rgba(255,255,255,0.12);color:var(--white);}
+.select-all-row{display:none;align-items:center;gap:.6rem;padding:.7rem 1rem;border-bottom:1px solid rgba(0,0,0,.06);font-size:.8rem;color:var(--text-muted);}
+.select-all-row input{width:18px;height:18px;accent-color:var(--gold);}
+
+.order-admin-card{padding:.9rem 1rem;border-bottom:1px solid rgba(0,0,0,.06);}
+.order-admin-card:last-child{border-bottom:none;}
+.oac-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.4rem;}
+.oac-id{font-family:monospace;font-size:.72rem;color:var(--text-muted);}
+.oac-total{font-weight:700;color:var(--gold);font-size:.95rem;}
+.oac-buyer{font-weight:600;font-size:.85rem;margin-bottom:.25rem;}
+.oac-items{font-size:.78rem;color:var(--text-muted);margin-bottom:.5rem;line-height:1.4;}
+.oac-bottom{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;}
+.oac-time{font-size:.72rem;color:var(--text-muted);}
+.oac-status-select{font-size:.78rem;padding:6px 10px;border:1px solid rgba(0,0,0,.12);border-radius:4px;background:var(--white);}
+
+.user-admin-card{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.9rem 1rem;border-bottom:1px solid rgba(0,0,0,.06);}
+.user-admin-card:last-child{border-bottom:none;}
+.uac-name{font-weight:600;font-size:.88rem;margin-bottom:.2rem;}
+.uac-email{font-size:.76rem;color:var(--text-muted);margin-bottom:.35rem;}
+.uac-meta{display:flex;gap:.4rem;flex-wrap:wrap;}
+.uac-date{font-size:.7rem;color:var(--text-muted);text-align:right;flex-shrink:0;}
+
 /* Product Form Modal */
 .form-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:1rem;}
 .form-modal{background:var(--white);border-radius:16px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;}
@@ -348,18 +401,58 @@ tr:hover td{background:rgba(0,0,0,.01);}
 .mobile-nav-close{position:absolute;top:1.5rem;right:1.5rem;background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.5rem;cursor:pointer;}
 
 /* ===== RESPONSIVE ===== */
-
+.cat-manage-card{background:#FFFFFF;border:1px solid rgba(0,0,0,.06);border-radius:8px;padding:1.25rem;display:flex;flex-direction:column;gap:1rem;}
+.cmc-top{display:flex;gap:1rem;align-items:flex-start;}
+.cmc-icon{font-size:2.5rem;flex-shrink:0;}
+.cmc-info{flex:1;min-width:0;}
+.cmc-label{font-weight:700;margin-bottom:.2rem;}
+.cmc-en{font-size:.72rem;letter-spacing:.1em;color:#7A6850;margin-bottom:.5rem;}
+.cmc-count{font-size:.78rem;color:#7A6850;}
+.cmc-count strong{color:#2B2218;}
+.cmc-count strong.cmc-active{color:#2D8C5F;}
+.cmc-btn{width:100%;}
 /* Tablets & small desktops */
 @media(max-width:900px){
   .category-strip{grid-template-columns:repeat(2,1fr);}
   .checkout-grid{grid-template-columns:1fr;}
   .order-summary-box{position:static;}
   .stats-grid{grid-template-columns:repeat(2,1fr);}
-  .admin-sidebar{transform:translateX(-100%);transition:transform .3s;}
-  .admin-sidebar.open{transform:none;}
-  .admin-main{margin-left:0;}
+  /* Mobile: turn the vertical admin sidebar into a horizontal scrollable
+     tab bar pinned to the top, instead of sliding off-canvas with no way
+     to bring it back (there was previously no hamburger/trigger for it). */
+  .admin-sidebar{
+    position:fixed;top:0;left:0;right:0;bottom:auto;
+    width:100%;height:auto;
+    transform:none;
+    flex-direction:row;
+    align-items:center;
+    z-index:100;
+    box-shadow:0 2px 12px rgba(0,0,0,.25);
+  }
+  .admin-logo{padding:.6rem .85rem;border-bottom:none;border-right:1px solid rgba(201,168,76,0.12);flex-shrink:0;white-space:nowrap;}
+  /* "OnePrime Admin" wordmark wastes width on a narrow top bar where every
+     pixel matters for reaching the nav tabs — show just the logo mark. */
+  .admin-logo-text{font-size:0;}
+  .admin-logo-text::before{content:'';display:block;width:28px;height:28px;background:url('../img/icon-32.png') center/cover;border-radius:6px;}
+  .admin-logo-sub{display:none;}
+  .admin-nav{flex:1;display:flex;flex-direction:row;padding:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .admin-nav::-webkit-scrollbar{display:none;}
+  .admin-nav-item{flex-direction:column;gap:.2rem;padding:.6rem .9rem;border-left:none;border-bottom:3px solid transparent;white-space:nowrap;flex-shrink:0;}
+  .admin-nav-item.active{background:rgba(201,168,76,0.1);border-left-color:transparent;border-bottom-color:var(--gold);}
+  .admin-nav-icon{font-size:1.1rem;}
+  .admin-footer{padding:.75rem 1rem;border-top:none;border-left:1px solid rgba(255,255,255,0.08);flex-shrink:0;}
+  .admin-logout{width:auto;white-space:nowrap;padding:8px 12px;}
+  .admin-main{margin-left:0;margin-top:60px;}
   .sh-nav{display:none;}
   .ham-btn{display:flex;}
+
+  /* Swap tables for card lists on the products/orders/users panels — see
+     the comment above .product-cards,.order-cards,.user-cards for why. */
+  .products-table-wrap,.orders-table-only,.users-table-only{display:none;}
+  .product-cards,.order-cards,.user-cards{display:block;}
+  .select-all-row{display:flex;}
+  .cat-stats-grid{grid-template-columns:repeat(2,1fr);}
+  .cat-manage-grid{grid-template-columns:1fr;}
 }
 
 /* Mobile phones - ONE ITEM PER ROW */
@@ -435,4 +528,13 @@ tr:hover td{background:rgba(0,0,0,.01);}
   /* Hero text smaller */
   .shop-hero{padding:50px 4vw 40px;}
   .shop-hero h1{font-size:clamp(1.5rem,6vw,2.2rem);}
+
+  /* Admin top tab bar: tighten further on very small phones */
+  .admin-nav-item{padding:.55rem .7rem;font-size:.72rem;}
+  .admin-main{margin-top:58px;padding:1.25rem 1rem;}
+  .admin-topbar{flex-wrap:wrap;gap:.5rem;}
+  .admin-card-header{flex-direction:column;align-items:stretch;}
+  .admin-card-header > div:first-child{flex-direction:column;align-items:stretch;}
+  .admin-search input{width:100%;}
+  .cat-stats-grid{grid-template-columns:1fr 1fr;} 
 }
