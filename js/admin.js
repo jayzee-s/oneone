@@ -34,16 +34,17 @@ function showAdminPanel(name) {
   document.querySelectorAll('.admin-nav-item').forEach(function(i) {
     i.classList.remove('active');
   });
-  var titles = {dashboard:'数据概览', products:'商品管理', orders:'订单管理', users:'用户管理', revenue:'收入趋势'};
+  var titles = {dashboard:'数据概览', products:'商品管理', orders:'订单管理', users:'用户管理', revenue:'收入趋势', membership:'会员管理'};
   document.getElementById('adminPageTitle').textContent = titles[name] || name;
   var navItems = document.querySelectorAll('.admin-nav-item');
-  var idx = {dashboard:0, products:1, orders:2, users:3, revenue:4};
+  var idx = {dashboard:0, products:1, orders:2, users:3, revenue:4, membership:5};
   if (navItems[idx[name]]) navItems[idx[name]].classList.add('active');
   if (name === 'dashboard') refreshAdminDashboard();
   if (name === 'products') renderAdminProducts();
   if (name === 'orders') renderOrders();
   if (name === 'users') renderUsers();
   if (name === 'revenue') renderRevenueChart();
+  if (name === 'membership') renderMembershipAdmin();
 }
 
 // Jump to 商品管理 pre-filtered to a given category — used by the
@@ -615,6 +616,81 @@ function deleteProduct(id) {
   saveProducts();
   renderAdminProducts();
   toast('商品已删除');
+}
+
+// ===== MEMBERSHIP MANAGEMENT =====
+// Admin can edit each tier's annual fee, discount, and the cumulative-
+// spend threshold that unlocks (not auto-grants) the option to upgrade.
+// loadMembershipTiers()/saveMembershipTiers() are defined in script.js
+// (loaded before this file), so they're reused here rather than
+// duplicated — same pattern as CATS.
+function renderMembershipAdmin() {
+  loadData();
+  var tiers = loadMembershipTiers();
+  var ordered = Object.keys(tiers).map(function(k){return tiers[k];}).sort(function(a,b){return a.order-b.order;});
+
+  var grid = document.getElementById('tierAdminGrid');
+  if (grid) {
+    grid.innerHTML = ordered.map(function(t) {
+      var productOptions = '<option value="">未指定（仅显示价值金额）</option>' +
+        state.products.map(function(p){
+          var selected = t.mysteryBoxProductId===p.id ? 'selected' : '';
+          return '<option value="'+p.id+'" '+selected+'>'+p.name+'（¥'+p.price+'）</option>';
+        }).join('');
+      return '<div class="tier-admin-card">' +
+        '<h4>'+t.label+'</h4>' +
+        '<div class="tier-admin-field"><label>年费（元）</label><input type="number" min="0" step="1" id="tierFee-'+t.key+'" value="'+t.fee+'"></div>' +
+        '<div class="tier-admin-field"><label>折扣（例如 0.9 表示9折，1 表示无折扣）</label><input type="number" min="0" max="1" step="0.01" id="tierDiscount-'+t.key+'" value="'+t.discount+'"></div>' +
+        '<div class="tier-admin-field"><label>累计消费门槛（元，达到后可补差价升级；0 表示入门级随时可开通）</label><input type="number" min="0" step="100" id="tierThreshold-'+t.key+'" value="'+t.spendThreshold+'"></div>' +
+        '<div class="tier-admin-field"><label>🎁 年度盲盒礼包商品</label><select id="tierBoxProduct-'+t.key+'">'+productOptions+'</select></div>' +
+        '<div class="tier-admin-field"><label>盲盒礼包宣传价值（元，显示给会员看的"价值¥X"）</label><input type="number" min="0" step="1" id="tierBoxValue-'+t.key+'" value="'+t.mysteryBoxValue+'"></div>' +
+        '<button class="admin-btn admin-btn-gold tier-admin-save" onclick="saveMembershipTierEdit(\''+t.key+'\')">保存'+t.label+'设置</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  var statsBody = document.getElementById('membershipStatsBody');
+  if (statsBody) {
+    statsBody.innerHTML = ordered.map(function(t) {
+      var count = state.users.filter(function(u){return u.membership===t.key;}).length;
+      var boxProduct = t.mysteryBoxProductId ? state.products.find(function(p){return p.id===t.mysteryBoxProductId;}) : null;
+      return '<tr>' +
+        '<td style="font-weight:600;">'+t.label+'</td>' +
+        '<td>¥'+t.fee+'/年</td>' +
+        '<td>'+(t.discount>=1 ? '无折扣' : Math.round((1-t.discount)*100)+'% OFF') +'</td>' +
+        '<td>'+(boxProduct ? boxProduct.name : '（未指定商品）')+' · ¥'+t.mysteryBoxValue+'</td>' +
+        '<td>'+count+' 人</td>' +
+        '</tr>';
+    }).join('');
+  }
+}
+
+function saveMembershipTierEdit(tierKey) {
+  var tiers = loadMembershipTiers();
+  var t = tiers[tierKey];
+  if (!t) { toast('会员等级不存在'); return; }
+
+  var feeEl = document.getElementById('tierFee-'+tierKey);
+  var discountEl = document.getElementById('tierDiscount-'+tierKey);
+  var thresholdEl = document.getElementById('tierThreshold-'+tierKey);
+  var boxProductEl = document.getElementById('tierBoxProduct-'+tierKey);
+  var boxValueEl = document.getElementById('tierBoxValue-'+tierKey);
+
+  var fee = parseFloat(feeEl.value);
+  var discount = parseFloat(discountEl.value);
+  var threshold = parseFloat(thresholdEl.value);
+  var boxProductId = boxProductEl.value ? parseInt(boxProductEl.value) : null;
+  var boxValue = parseFloat(boxValueEl.value);
+
+  if (isNaN(fee) || fee < 0) { toast('请输入有效的年费'); return; }
+  if (isNaN(discount) || discount < 0 || discount > 1) { toast('折扣必须在 0 到 1 之间'); return; }
+  if (isNaN(threshold) || threshold < 0) { toast('消费门槛必须为非负数'); return; }
+  if (isNaN(boxValue) || boxValue < 0) { toast('盲盒价值必须为非负数'); return; }
+
+  tiers[tierKey] = Object.assign({}, t, {fee: fee, discount: discount, spendThreshold: threshold, mysteryBoxProductId: boxProductId, mysteryBoxValue: boxValue});
+  saveMembershipTiers(tiers);
+  renderMembershipAdmin();
+  toast(t.label+' 设置已保存');
 }
 
 // ===== LOGOUT =====

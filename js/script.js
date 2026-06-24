@@ -20,6 +20,178 @@ const CATS = {
   food:   {label:'功能性食品',en:'FUNCTIONAL FOODS',icon:'🌿',sub:'营养均衡 · 健康生活'},
 };
 
+// ===== MEMBERSHIP TIERS =====
+// Three paid annual tiers. Advancement is based ONLY on the member's own
+// purchases with this store — either paying the fee difference outright,
+// or reaching a personal cumulative-spend threshold which unlocks the
+// option to pay the difference and upgrade (it does not auto-upgrade for
+// free, and it is never based on recruiting other members). Editable from
+// the admin portal (fee / discount / spend threshold / 盲盒 gift per tier).
+// mysteryBoxProductId points at a product in the catalog that's given as
+// the tier's annual 盲盒礼包 gift — admin can pick which product via the
+// 会员管理 panel. mysteryBoxValue is the advertised gift value shown to
+// members (defaults to matching the tier's annual fee, since that's what
+// was specified, but kept editable separately in case it should diverge).
+const DEFAULT_MEMBERSHIP_TIERS = {
+  normal:    {key:'normal',   label:'普通会员', fee:199, discount:1,    spendThreshold:0,     order:0, mysteryBoxProductId:null, mysteryBoxValue:199},
+  manager:   {key:'manager',  label:'掌柜',     fee:399, discount:0.9,  spendThreshold:10000, order:1, mysteryBoxProductId:null, mysteryBoxValue:399},
+  dealer:    {key:'dealer',   label:'经销商',   fee:999, discount:0.8,  spendThreshold:50000, order:2, mysteryBoxProductId:null, mysteryBoxValue:999},
+};
+
+function loadMembershipTiers(){
+  var stored = localStorage.getItem('oneprime_membership_tiers');
+  if(!stored){
+    localStorage.setItem('oneprime_membership_tiers', JSON.stringify(DEFAULT_MEMBERSHIP_TIERS));
+    return JSON.parse(JSON.stringify(DEFAULT_MEMBERSHIP_TIERS));
+  }
+  try{
+    var parsed = JSON.parse(stored);
+    // One-time pricing correction: anyone who loaded this site before the
+    // fee schedule changed (99/299/599 -> 199/399/999) has the OLD fees
+    // permanently stuck in their localStorage, since saved data normally
+    // wins over new defaults (intentional, so real admin edits aren't
+    // silently overwritten). We detect specifically the old default fees
+    // (not just "any fee") and migrate only those untouched defaults
+    // forward — an admin who deliberately set a custom fee already
+    // overwrote the old default, so this migration correctly leaves
+    // their edit alone.
+    var oldDefaultFees = {normal:99, manager:299, dealer:599};
+    Object.keys(oldDefaultFees).forEach(function(k){
+      if(parsed[k] && parsed[k].fee===oldDefaultFees[k]){
+        parsed[k].fee = DEFAULT_MEMBERSHIP_TIERS[k].fee;
+      }
+      // Backfill the new mystery-box fields for tiers saved before they existed.
+      if(parsed[k] && parsed[k].mysteryBoxValue===undefined){
+        parsed[k].mysteryBoxValue = DEFAULT_MEMBERSHIP_TIERS[k].mysteryBoxValue;
+      }
+      if(parsed[k] && parsed[k].mysteryBoxProductId===undefined){
+        parsed[k].mysteryBoxProductId = DEFAULT_MEMBERSHIP_TIERS[k].mysteryBoxProductId;
+      }
+    });
+    localStorage.setItem('oneprime_membership_tiers', JSON.stringify(parsed));
+    // Guard against a corrupted/partial save wiping out a tier
+    return Object.assign({}, DEFAULT_MEMBERSHIP_TIERS, parsed);
+  }catch(e){
+    return JSON.parse(JSON.stringify(DEFAULT_MEMBERSHIP_TIERS));
+  }
+}
+
+function saveMembershipTiers(tiers){
+  localStorage.setItem('oneprime_membership_tiers', JSON.stringify(tiers));
+}
+
+function getTierOrdered(){
+  var tiers = loadMembershipTiers();
+  return Object.keys(tiers).map(function(k){return tiers[k];}).sort(function(a,b){return a.order-b.order;});
+}
+
+// A user with no membership at all (never paid) gets no discount — this is
+// distinct from "普通会员", which is the lowest *paid* tier. Browsing and
+// buying without ever joining is always allowed at full price.
+function getUserDiscount(user){
+  if(!user || !user.membership) return 1;
+  var tiers = loadMembershipTiers();
+  var t = tiers[user.membership];
+  return t ? t.discount : 1;
+}
+
+function getUserMembershipLabel(user){
+  if(!user || !user.membership) return '非会员';
+  var tiers = loadMembershipTiers();
+  var t = tiers[user.membership];
+  return t ? t.label : '非会员';
+}
+
+// Cumulative spend only counts completed, non-demo orders tied to this
+// user's id — mirrors the same real/demo distinction used in the admin
+// dashboard's revenue figures.
+function getUserCumulativeSpend(userId){
+  if(!userId) return 0;
+  var orders = JSON.parse(localStorage.getItem('oneprime_orders')||'[]');
+  return orders
+    .filter(function(o){return o.userId===userId && !o.isDemo;})
+    .reduce(function(s,o){return s+o.total;},0);
+}
+
+// Returns the highest tier (by spend threshold) the user qualifies for
+// based on cumulative spend alone — used to show "您已可补差价升级到X"
+// without ever auto-upgrading or charging automatically.
+function getEligibleTierBySpend(userId){
+  var spend = getUserCumulativeSpend(userId);
+  var ordered = getTierOrdered();
+  var eligible = null;
+  ordered.forEach(function(t){
+    if(spend >= t.spendThreshold) eligible = t;
+  });
+  return eligible;
+}
+
+// ===== TIERED PRICE BREAKDOWN =====
+// Builds the full retail -> 普通会员参考价 -> 用户当前等级价 breakdown for
+// a single product, regardless of whether the user has actually paid for
+// any membership yet. This always shows what 普通会员 pricing WOULD be
+// (since that's tier order 0, always defined) as a reference point, then
+// — only if the user actually holds a paid tier above 普通会员 — the
+// further savings their actual tier gives on top of that reference price.
+// All discount amounts are computed against the original retail price,
+// per explicit instruction, not chained percentage-of-percentage.
+function getPriceBreakdown(retailPrice, user){
+  var tiers = loadMembershipTiers();
+  var ordered = getTierOrdered();
+  var normalTier = ordered.length ? ordered[0] : null; // order:0, always the baseline reference
+  var normalPrice = normalTier ? Math.round(retailPrice*normalTier.discount*100)/100 : retailPrice;
+
+  var currentTier = (user && user.membership) ? tiers[user.membership] : null;
+  // IMPORTANT: a user with no paid membership at all must actually be
+  // charged full retail price — normalPrice is shown elsewhere purely as
+  // an illustration of "this is what 普通会员 pricing would look like",
+  // it is NOT a price anyone gets without having actually paid for that
+  // tier. Conflating the two would silently undercharge non-members
+  // whenever 普通会员's discount is ever changed away from 1 in admin.
+  var currentPrice = currentTier ? Math.round(retailPrice*currentTier.discount*100)/100 : retailPrice;
+
+  // "Previous tier" for the savings-vs-previous-tier line: the tier one
+  // order below the user's current tier (e.g. 经销商's previous is 掌柜,
+  // 掌柜's previous is 普通会员). Only relevant when the user actually
+  // holds a tier above the baseline.
+  var previousTier = null;
+  if(currentTier && currentTier.order>0){
+    previousTier = ordered.filter(function(t){return t.order===currentTier.order-1;})[0] || normalTier;
+  }
+  var previousPrice = previousTier ? Math.round(retailPrice*previousTier.discount*100)/100 : normalPrice;
+  var savingsVsPrevious = previousTier && currentTier && currentTier.order>0 ? Math.round((previousPrice-currentPrice)*100)/100 : 0;
+
+  return {
+    retailPrice: retailPrice,
+    normalTier: normalTier,
+    normalPrice: normalPrice,       // reference/illustration only — see note above
+    currentTier: currentTier,       // null if user holds no paid membership at all
+    currentPrice: currentPrice,     // what the user is ACTUALLY charged — equals retailPrice if no paid membership
+    previousTier: previousTier,
+    previousPrice: previousPrice,
+    savingsVsPrevious: savingsVsPrevious,
+    hasPaidTierAboveNormal: !!(currentTier && currentTier.order>0)
+  };
+}
+
+// How much more cumulative spend is needed to qualify for the NEXT tier
+// above the user's current one — used on the membership page, cart, and
+// checkout per explicit instruction. Returns null if there's no higher
+// tier, or if the user already qualifies for the highest tier.
+function getAmountToNextTier(user){
+  if(!user) return null;
+  var tiers = loadMembershipTiers();
+  var ordered = getTierOrdered();
+  var current = user.membership ? tiers[user.membership] : null;
+  var currentOrder = current ? current.order : -1;
+  var next = ordered.filter(function(t){return t.order===currentOrder+1;})[0];
+  if(!next) return null;
+  var spend = getUserCumulativeSpend(user.id);
+  var remaining = next.spendThreshold - spend;
+  if(remaining<=0) return null; // already qualifies — handled by the "可补差价升级" messaging instead
+  return {tier: next, remaining: Math.round(remaining*100)/100, spend: spend};
+}
+
 // ===== SAMPLE DATA =====
 function initData(){
   if(!localStorage.getItem('oneprime_products')){
@@ -53,7 +225,7 @@ function initData(){
   }
   if(!localStorage.getItem('oneprime_users')){
     localStorage.setItem('oneprime_users',JSON.stringify([
-      {id:1,name:'管理员',email:'admin@oneprime.com.au',provider:'email',role:'admin',createdAt:new Date().toISOString(),active:true},
+      {id:1,name:'管理员',email:'admin@oneprime.com.au',provider:'email',role:'admin',createdAt:new Date().toISOString(),active:true,membership:null},
     ]));
   }
   if(!localStorage.getItem('oneprime_orders')){
@@ -119,6 +291,27 @@ function loadData(){
   state.orders=JSON.parse(localStorage.getItem('oneprime_orders')||'[]');
 }
 
+// ===== SESSION PERSISTENCE =====
+// state.currentUser is just an in-memory JS variable, which resets to
+// null on every page load/navigation/refresh — this was a pre-existing
+// gap (logging in and simply refreshing the page already logged you out)
+// that became disruptive once registration needed to redirect to a
+// separate page (membership.html) while staying logged in. We persist
+// only the user's id (not the whole object, which can go stale) and
+// re-look-up the full user record from oneprime_users on every load.
+function saveSession(user){
+  if(user) localStorage.setItem('oneprime_session_user_id', String(user.id));
+  else localStorage.removeItem('oneprime_session_user_id');
+}
+
+function restoreSession(){
+  var id = localStorage.getItem('oneprime_session_user_id');
+  if(!id) return null;
+  var users = JSON.parse(localStorage.getItem('oneprime_users')||'[]');
+  var u = users.find(function(x){ return String(x.id)===String(id); });
+  return u || null;
+}
+
 function saveProducts(){localStorage.setItem('oneprime_products',JSON.stringify(state.products));}
 function saveUsers(){localStorage.setItem('oneprime_users',JSON.stringify(state.users));}
 function saveOrders(){localStorage.setItem('oneprime_orders',JSON.stringify(state.orders));}
@@ -135,7 +328,12 @@ function toast(msg,dur){
 function socialLogin(provider){
   const name = provider==='Google'?'Google 用户':provider==='Apple'?'Apple 用户':'Facebook 用户';
   const email = 'user_' + Date.now() + '@' + provider.toLowerCase() + '.com';
-  loginUser({name:name,email:email,provider:provider,role:'customer'});
+  const users=JSON.parse(localStorage.getItem('oneprime_users')||'[]');
+  const newUser={id:Date.now(),name:name,email:email,provider:provider,role:'customer',createdAt:new Date().toISOString(),active:true,membership:null};
+  users.push(newUser);
+  localStorage.setItem('oneprime_users',JSON.stringify(users));
+  loadData();
+  loginUser(newUser,false,true);
 }
 
 function emailLogin(){
@@ -156,24 +354,31 @@ function emailRegister(){
   if(pwd.length<6){toast('密码至少6位');return;}
   const users=JSON.parse(localStorage.getItem('oneprime_users')||'[]');
   if(users.find(function(x){return x.email===email;})){toast('该邮箱已注册');return;}
-  const newUser={id:Date.now(),name:name,email:email,provider:'email',role:'customer',createdAt:new Date().toISOString(),active:true};
+  const newUser={id:Date.now(),name:name,email:email,provider:'email',role:'customer',createdAt:new Date().toISOString(),active:true,membership:null};
   users.push(newUser);
   localStorage.setItem('oneprime_users',JSON.stringify(users));
   loadData();
-  loginUser(newUser);
+  loginUser(newUser,false,true);
 }
 
 function adminLogin(){
-  loginUser({name:'管理员',email:'admin@oneprime.com.au',provider:'email',role:'admin'},true);
+  loginUser({id:1,name:'管理员',email:'admin@oneprime.com.au',provider:'email',role:'admin'},true);
 }
 
-function loginUser(u,isAdmin){
+function loginUser(u,isAdmin,isNewRegistration){
   state.currentUser=u;
   state.isAdmin=isAdmin||u.role==='admin';
+  saveSession(u);
   closeAuthModal();
   if(state.isAdmin){
     // Redirect to admin page
     window.location.href = 'admin.html';
+  } else if(isNewRegistration && !u.membership){
+    // New sign-ups go straight to picking a membership tier (paid annual
+    // tiers based purely on the member's own spend/payment — see
+    // membership.html). Existing users who skipped this before just land
+    // on the shop as usual.
+    window.location.href = 'membership.html';
   } else {
     showShopScreen();
   }
@@ -204,15 +409,17 @@ document.addEventListener('click',function(e){
 
 function logout(){
   state.currentUser=null;state.isAdmin=false;state.cart=[];
-  // headerGuest/headerUser/cart UI only exist on the shop page (index.html);
-  // guard so this also runs safely if ever invoked from admin.html
+  saveSession(null);
+  // headerGuest/headerUser/cart UI only exist on pages that reuse the shop
+  // header (index.html, membership.html); guard so this also runs safely
+  // if ever invoked from admin.html, which has none of this markup.
   const shopScreen=document.getElementById('shopScreen');
   if(!shopScreen){
     // We're on a page without the shop UI (e.g. admin.html) — just leave.
     window.location.href='index.html';
     return;
   }
-  updateCart();
+  if(document.getElementById('cartItems'))updateCart();
   shopScreen.classList.add('active');
   document.getElementById('headerGuest').style.display='';
   document.getElementById('headerUser').style.display='none';
@@ -220,9 +427,16 @@ function logout(){
   const mlo=document.getElementById('mobileLogoutLink');
   if(ml)ml.style.display='';
   if(mlo)mlo.style.display='none';
-  renderHomePage();
-  showPage('home');
+  // renderHomePage()/showPage() need the full shop SPA markup (only on
+  // index.html) — membership.html reuses the header but has none of the
+  // page-home/page-category/page-checkout sections.
+  if(document.getElementById('homeProductGrid')){
+    renderHomePage();
+    showPage('home');
+  }
   closeAuthModal();
+  // On membership.html, reflect the logged-out state in its own UI too.
+  if(typeof refreshMembershipPage==='function')refreshMembershipPage();
 }
 
 function switchAuthMode(mode){
@@ -246,9 +460,17 @@ function showShopScreen(){
     if(ml)ml.style.display='none';
     if(mlo)mlo.style.display='';
   }
-  renderHomePage();
-  showPage('home');
-  updateCategoryCounts();
+  // renderHomePage()/showPage()/updateCategoryCounts() touch elements
+  // (#homeProductGrid, #page-home, #page-category, #page-checkout) that
+  // only exist on index.html's full shop SPA markup — guard so this
+  // function is also safe to call from simpler standalone pages like
+  // membership.html that reuse the same header/login UI.
+  if(document.getElementById('homeProductGrid')){
+    renderHomePage();
+    showPage('home');
+    updateCategoryCounts();
+  }
+  if(typeof refreshMembershipPage==='function')refreshMembershipPage();
 }
 
 // ===== PAGES =====
@@ -314,6 +536,13 @@ function renderProductGrid(container,prods){
   }
   container.innerHTML=prods.map(function(p){
     const qty=getCartQty(p.id);
+    const pb=getPriceBreakdown(p.price,state.currentUser);
+    // Card view stays simple: retail price + the price the user actually
+    // pays right now. Full breakdown (普通会员参考价 + 比上一档又省多少)
+    // lives in the product modal to avoid crowding this card.
+    const priceHtml = pb.currentPrice<pb.retailPrice
+      ? '<span class="prod-price">¥'+pb.currentPrice+'</span><span class="prod-price-orig">¥'+pb.retailPrice+'</span>'+(pb.currentTier?'<span class="member-price-tag">'+pb.currentTier.label+'价</span>':'')
+      : '<span class="prod-price">¥'+pb.retailPrice+'</span>'+(p.origPrice ? '<span class="prod-price-orig">¥'+p.origPrice+'</span>' : '');
     return '<div class="prod-card" onclick="openProduct('+p.id+')">'+
       (p.img ? '<img class="prod-img" src="'+p.img+'" alt="'+p.name+'">' : '<div class="prod-img-placeholder">'+(CATS[p.cat]?CATS[p.cat].icon:'📦')+'</div>')+
       '<div class="prod-body">'+
@@ -321,7 +550,7 @@ function renderProductGrid(container,prods){
         '<div class="prod-name">'+p.name+'</div>'+
         '<div class="prod-desc">'+p.desc+'</div>'+
         '<div class="prod-foot">'+
-          '<div><span class="prod-price">¥'+p.price+'</span>'+(p.origPrice ? '<span class="prod-price-orig">¥'+p.origPrice+'</span>' : '')+'</div>'+
+          '<div>'+priceHtml+'</div>'+
           '<div class="prod-qty-ctrl" onclick="event.stopPropagation()">'+
             '<button onclick="cardDecrement('+p.id+')">−</button>'+
             '<div class="prod-qty-num" id="card-qty-'+p.id+'">'+(qty||0)+'</div>'+
@@ -357,17 +586,47 @@ let modalQty=1;
 function openProduct(id){
   const p=state.products.find(function(x){return x.id===id;});if(!p)return;
   modalQty=1;
+  const pb=getPriceBreakdown(p.price,state.currentUser);
+
+  // Build the price breakdown block. Always show 原价 (struck through if
+  // any discount applies anywhere) and the 普通会员参考价 as a reference
+  // point — even for users who haven't paid for any membership yet, so
+  // they can see what joining would get them. Only when the user actually
+  // holds a paid tier above 普通会员 do we add a further "当前等级价" line
+  // plus how much more that saves versus the previous tier.
+  let priceBreakdownHtml = '';
+  if(pb.hasPaidTierAboveNormal){
+    priceBreakdownHtml =
+      '<div class="modal-price-row">'+
+        '<span class="modal-price">¥'+pb.currentPrice+'</span>'+
+        '<span class="modal-orig">¥'+pb.retailPrice+'</span>'+
+        '<span class="badge badge-gold">'+pb.currentTier.label+'专享价</span>'+
+      '</div>'+
+      '<div class="price-tier-breakdown">'+
+        '<div class="ptb-row"><span class="ptb-label">原价</span><span class="ptb-value ptb-strike">¥'+pb.retailPrice+'</span></div>'+
+        '<div class="ptb-row"><span class="ptb-label">普通会员参考价</span><span class="ptb-value">¥'+pb.normalPrice+'</span></div>'+
+        '<div class="ptb-row ptb-current"><span class="ptb-label">'+pb.currentTier.label+'价（您当前等级）</span><span class="ptb-value">¥'+pb.currentPrice+'</span></div>'+
+        (pb.savingsVsPrevious>0.001 ? '<div class="ptb-savings">🎉 比'+pb.previousTier.label+'又省 ¥'+pb.savingsVsPrevious.toFixed(2)+'</div>' : '')+
+      '</div>';
+  } else {
+    // User holds no paid membership (or only browsing as a guest) — show
+    // retail price plus the 普通会员 reference price as an upsell.
+    priceBreakdownHtml =
+      '<div class="modal-price-row">'+
+        '<span class="modal-price">¥'+pb.retailPrice+'</span>'+
+        (p.origPrice ? '<span class="modal-orig">¥'+p.origPrice+'</span>' : '')+
+        (p.origPrice ? '<span class="badge badge-gold">省¥'+(p.origPrice-p.price)+'</span>' : '')+
+      '</div>'+
+      (pb.normalPrice<pb.retailPrice ? '<div class="price-tier-breakdown"><div class="ptb-row"><span class="ptb-label">普通会员参考价</span><span class="ptb-value">¥'+pb.normalPrice+'</span></div></div>' : '');
+  }
+
   document.getElementById('modalContent').innerHTML=
     (p.img ? '<img class="modal-img" src="'+p.img+'" alt="'+p.name+'">' : '<div class="modal-img-ph">'+(CATS[p.cat]?CATS[p.cat].icon:'📦')+'</div>')+
     '<div class="modal-body">'+
       '<div class="modal-cat">'+(CATS[p.cat]?CATS[p.cat].icon:'')+' '+(CATS[p.cat]?CATS[p.cat].label:'')+' · '+(p.nameEn||'')+'</div>'+
       '<div class="modal-name">'+p.name+'</div>'+
       '<div class="modal-desc">'+p.desc+'</div>'+
-      '<div class="modal-price-row">'+
-        '<span class="modal-price">¥'+p.price+'</span>'+
-        (p.origPrice ? '<span class="modal-orig">¥'+p.origPrice+'</span>' : '')+
-        (p.origPrice ? '<span class="badge badge-gold">省¥'+(p.origPrice-p.price)+'</span>' : '')+
-      '</div>'+
+      priceBreakdownHtml+
       '<div class="qty-row">'+
         '<div class="qty-ctrl">'+
           '<button onclick="changeModalQty(-1)">−</button>'+
@@ -376,6 +635,7 @@ function openProduct(id){
         '</div>'+
         '<button class="modal-add-btn" onclick="addToCartFromModal('+p.id+')">加入购物车</button>'+
       '</div>'+
+      (!state.currentUser || !state.currentUser.membership ? '<div class="member-upsell-hint">💎 加入会员最高享8折优惠 · <a onclick="window.location.href=\'membership.html\'">了解会员权益</a></div>' : '')+
       '<div style="font-size:.72rem;color:var(--text-muted);">库存：'+p.stock+'件 · 假一赔千 · 官方授权</div>'+
     '</div>';
   const ov=document.getElementById('prodModal');
@@ -404,9 +664,10 @@ function closeProdModalDirect(){
 // ===== CART =====
 function addToCart(id,silent){
   const p=state.products.find(function(x){return x.id===id;});if(!p)return;
+  const pb=getPriceBreakdown(p.price,state.currentUser);
   const existing=state.cart.find(function(x){return x.id===id;});
   if(existing)existing.qty++;
-  else state.cart.push({id:id,name:p.name,price:p.price,img:p.img,cat:p.cat,qty:1});
+  else state.cart.push({id:id,name:p.name,price:pb.currentPrice,origPrice:p.price,img:p.img,cat:p.cat,qty:1});
   updateCart();
   if(!silent)toast('✓ 已加入购物车');
 }
@@ -426,6 +687,7 @@ function changeCartQty(id,d){
 
 function updateCart(){
   const total=state.cart.reduce(function(s,i){return s+i.price*i.qty;},0);
+  const origTotal=state.cart.reduce(function(s,i){return s+(i.origPrice||i.price)*i.qty;},0);
   const count=state.cart.reduce(function(s,i){return s+i.qty;},0);
   const countEl=document.getElementById('cartCount');
   if(countEl)countEl.textContent=count;
@@ -441,7 +703,7 @@ function updateCart(){
       (i.img ? '<img class="cart-item-img" src="'+i.img+'" alt="'+i.name+'">' : '<div class="cart-item-img-ph">'+(CATS[i.cat]?CATS[i.cat].icon:'📦')+'</div>')+
       '<div class="cart-item-info">'+
         '<div class="cart-item-name">'+i.name+'</div>'+
-        '<div class="cart-item-price">¥'+i.price+'</div>'+
+        '<div class="cart-item-price">¥'+i.price+(i.origPrice&&i.origPrice>i.price?' <span class="ci-orig">¥'+i.origPrice+'</span>':'')+'</div>'+
         '<div class="cart-item-controls">'+
           '<div class="ci-qty">'+
             '<button onclick="changeCartQty('+i.id+',-1)">−</button>'+
@@ -453,9 +715,24 @@ function updateCart(){
       '</div>'+
     '</div>';
   }).join('');
+  const savings = origTotal-total;
   footEl.innerHTML=
+    (savings>0.001 ? '<div class="cart-savings-row">🎉 '+getUserMembershipLabel(state.currentUser)+'折扣已为您节省 ¥'+savings.toFixed(2)+'</div>' : '')+
+    renderNextTierHint()+
     '<div class="cart-total-row"><span class="cart-total-label">合计 ('+count+'件)</span><span class="cart-total-price">¥'+total.toFixed(2)+'</span></div>'+
     '<button class="checkout-btn" onclick="goCheckout()">去结算</button>';
+}
+
+// Shared "还差¥X升级到下一档" hint used on both the cart drawer and the
+// checkout page (and mirrored on membership.html), per explicit
+// instruction. Only shows for logged-in users who haven't already
+// qualified for the next tier by spend (that case is handled by the
+// existing "可补差价升级" messaging on the membership page instead).
+function renderNextTierHint(){
+  if(!state.currentUser) return '';
+  const info = getAmountToNextTier(state.currentUser);
+  if(!info) return '';
+  return '<div class="next-tier-hint">📈 距离 <strong>'+info.tier.label+'</strong>（累计消费满 ¥'+info.tier.spendThreshold.toLocaleString()+'）还差 <strong>¥'+info.remaining.toFixed(2)+'</strong> · <a onclick="window.location.href=\'membership.html\'">查看会员权益</a></div>';
 }
 
 function toggleCart(){
@@ -474,10 +751,17 @@ function renderCheckout(){
   const ckTotal=document.getElementById('ckTotal');
   if(!ckItems)return;
   const total=state.cart.reduce(function(s,i){return s+i.price*i.qty;},0);
+  const origTotal=state.cart.reduce(function(s,i){return s+(i.origPrice||i.price)*i.qty;},0);
   ckItems.innerHTML=state.cart.map(function(i){
     return '<div class="os-item"><span class="os-item-name">'+i.name+' ×'+i.qty+'</span><span class="os-item-price">¥'+(i.price*i.qty).toFixed(2)+'</span></div>';
   }).join('');
+  const savings = origTotal-total;
+  if(savings>0.001){
+    ckItems.innerHTML += '<div class="os-item os-savings"><span class="os-item-name">'+getUserMembershipLabel(state.currentUser)+'折扣优惠</span><span class="os-item-price">−¥'+savings.toFixed(2)+'</span></div>';
+  }
   ckTotal.textContent='¥'+total.toFixed(2);
+  const ckHintEl=document.getElementById('ckNextTierHint');
+  if(ckHintEl)ckHintEl.innerHTML=renderNextTierHint();
   const u=state.currentUser;
   if(u){
     const n=document.getElementById('ck-name');
@@ -512,6 +796,54 @@ function placeOrder(){
   showPage('home');
 }
 
+// ===== MEMBERSHIP UPGRADE/PAYMENT (SIMULATED) =====
+// This entire site has no real payment processor connected — order
+// checkout is simulated, and so is membership payment. Nothing here
+// charges a real card. Advancement is strictly: (a) pay the fee difference
+// outright, or (b) personal cumulative spend unlocks the *option* to pay
+// the difference — never a free automatic upgrade, and never tied to
+// referring/recruiting other people.
+function getUpgradeCost(targetTierKey){
+  var tiers = loadMembershipTiers();
+  var target = tiers[targetTierKey];
+  if(!target) return 0;
+  var current = state.currentUser && state.currentUser.membership ? tiers[state.currentUser.membership] : null;
+  var alreadyPaid = current ? current.fee : 0;
+  return Math.max(0, target.fee - alreadyPaid);
+}
+
+function purchaseMembership(targetTierKey){
+  if(!state.currentUser){ toast('请先登录'); openAuthModal(); return; }
+  var tiers = loadMembershipTiers();
+  var target = tiers[targetTierKey];
+  if(!target){ toast('会员等级不存在'); return; }
+
+  var current = state.currentUser.membership ? tiers[state.currentUser.membership] : null;
+  if(current && current.order >= target.order){
+    toast('您已是'+current.label+'或更高等级');
+    return;
+  }
+
+  var cost = getUpgradeCost(targetTierKey);
+  if(!confirm('（模拟支付）确认支付 ¥'+cost+' '+(current?'补差价升级':'开通')+'为'+target.label+'吗？\n本站未接入真实支付，这里仅模拟扣款流程。')) return;
+
+  var users = JSON.parse(localStorage.getItem('oneprime_users')||'[]');
+  var idx = users.findIndex(function(u){return u.id===state.currentUser.id;});
+  if(idx===-1){ toast('用户数据异常，请重新登录'); return; }
+  users[idx].membership = targetTierKey;
+  users[idx].membershipSince = new Date().toISOString();
+  localStorage.setItem('oneprime_users', JSON.stringify(users));
+  state.currentUser = users[idx];
+  loadData();
+  toast('🎉 已开通'+target.label+'（模拟支付成功）');
+  // Immediately reflect the new tier everywhere relevant — without this,
+  // the membership page kept showing the OLD tier/status until a manual
+  // page reload, even though the purchase had actually succeeded.
+  if(typeof refreshMembershipPage==='function')refreshMembershipPage();
+  if(document.getElementById('homeProductGrid'))renderHomePage();
+  if(document.getElementById('cartItems'))updateCart();
+}
+
 // ===== MOBILE NAV =====
 function toggleMobileNav(){
   document.getElementById('mobileNav').classList.toggle('open');
@@ -519,11 +851,39 @@ function toggleMobileNav(){
 
 // ===== INIT =====
 initData();
+
+// Restore login session (see saveSession/restoreSession above) before any
+// rendering happens, so price displays, header state, and the membership
+// page all reflect the logged-in user immediately rather than briefly
+// flashing a "guest" state on every page load/navigation.
+var restoredUser = restoreSession();
+if(restoredUser){
+  state.currentUser = restoredUser;
+  state.isAdmin = restoredUser.role==='admin';
+}
+
 // Start on shop screen — no login required to browse.
-// Guarded because script.js is also loaded on admin.html, which has no
-// shopScreen element (the admin panel lives on its own page).
+// Guarded on #homeProductGrid specifically (not just #shopScreen) because
+// membership.html reuses the #shopScreen header markup for login/logout,
+// but doesn't have the full shop SPA's home/category/checkout sections.
 if(document.getElementById('shopScreen')){
   document.getElementById('shopScreen').classList.add('active');
+  // Reflect the restored session in the header UI immediately (this is
+  // the same header-population logic showShopScreen() does on login).
+  if(restoredUser){
+    document.getElementById('headerGuest').style.display='none';
+    document.getElementById('headerUser').style.display='';
+    document.getElementById('userNameDisplay').textContent=restoredUser.name;
+    document.getElementById('userAvatar').textContent=restoredUser.name[0].toUpperCase();
+    document.getElementById('dropUserEmail').textContent=restoredUser.email||restoredUser.name;
+    var ml0=document.getElementById('mobileLoginLink');
+    var mlo0=document.getElementById('mobileLogoutLink');
+    if(ml0)ml0.style.display='none';
+    if(mlo0)mlo0.style.display='';
+  }
+}
+if(document.getElementById('homeProductGrid')){
   renderHomePage();
   updateCategoryCounts();
 }
+if(typeof refreshMembershipPage==='function')refreshMembershipPage();
